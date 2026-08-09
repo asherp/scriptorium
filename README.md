@@ -59,7 +59,7 @@ engine.outlines.insert("□", "M0,0 L1,0 L1,1 L0,1 Z");
 
 let out = engine.illuminate(&GrowthRequest {
     seed: "00000000000000000009a5b2b9c4de6c".to_string(),
-    confirmations: 5_000.0,
+    time: 5_000.0,   // in the host's own unit — see `stages`
     host: Rect::new(0.0, 0.0, 600.0, 400.0),
     page: Some(Rect::new(-40.0, -40.0, 680.0, 480.0)),
     obstacles: vec![Rect::new(40.0, 200.0, 300.0, 14.0)],

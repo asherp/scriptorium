@@ -127,7 +127,7 @@ impl Default for Params {
     }
 }
 
-/// Age, bucketed: a confirmation-style depth count maps to a discrete stage.
+/// Age, bucketed: how long a thing has stood maps to a discrete stage.
 ///
 /// Buckets, not a continuous function of depth. A stage is a cache key; a
 /// smooth mapping would mean nothing is ever settled enough to cache or to
@@ -149,6 +149,12 @@ impl GrowthStage {
 }
 
 /// The default ladder: bare, curl, vine, bordered, illuminated.
+///
+/// Its bounds are shaped for a blockchain confirmation count — 1, 6, a day's
+/// worth, four weeks' worth — because that is what it was first grown against.
+/// A host counting in days, revisions or seconds should supply its own ladder;
+/// [`crate::GrowthRequest::time`] carries no unit of its own, and these
+/// thresholds are the only place one is implied.
 pub fn default_growth_stages() -> Vec<GrowthStage> {
     vec![
         GrowthStage::new(0.0, 0.0, "bare", 0),
@@ -159,13 +165,16 @@ pub fn default_growth_stages() -> Vec<GrowthStage> {
     ]
 }
 
-/// Which bucket a depth count falls in. Negative and non-finite counts read as
-/// zero; a count past the last bucket saturates there rather than falling out.
-pub fn growth_stage(confirmations: f64, stages: &[GrowthStage]) -> usize {
+/// Which bucket a `time` falls in. Negative and non-finite values read as zero;
+/// a value past the last bucket saturates there rather than falling out.
+///
+/// The unit is the host's to choose — see [`crate::GrowthRequest::time`]. This
+/// only ever compares it against the ladder's own bounds.
+pub fn growth_stage(time: f64, stages: &[GrowthStage]) -> usize {
     if stages.is_empty() {
         return 0;
     }
-    let n = if confirmations.is_finite() { confirmations.max(0.0) } else { 0.0 };
+    let n = if time.is_finite() { time.max(0.0) } else { 0.0 };
     stages
         .iter()
         .position(|s| n >= s.min && n <= s.max)

@@ -42,9 +42,17 @@ pub struct GrowthRequest {
     /// Seeds the grammar AND the per-anchor streams: the same seed gives the
     /// same reading to every viewer. A block hash, a txid, a document id.
     pub seed: String,
-    /// Depth, bucketed into a stage by [`growth_stage`]. Stage 0 grows
-    /// nothing at all.
-    pub confirmations: f64,
+    /// How long this thing has stood, in whatever unit the host counts in —
+    /// confirmations, days, revisions, seconds. Bucketed into a stage by
+    /// [`growth_stage`] against [`GrowthRequest::stages`], which is where the
+    /// unit is actually decided: the engine only ever compares this against
+    /// that ladder's own bounds, and never attaches a meaning to it. Stage 0
+    /// grows nothing at all.
+    ///
+    /// Deliberately not a duration type. A host that counts in blocks or in
+    /// edits has no duration to give, and the ladder is a set of thresholds in
+    /// the host's own units rather than in seconds.
+    pub time: f64,
     /// The positioning context's own box. Only its size is read; growth is
     /// aimed away from its centre.
     pub host: Rect,
@@ -98,7 +106,7 @@ pub struct GrowthResponse {
     /// One entry per seed, in the order they were given — empty when the
     /// stage is bare.
     pub anchors: Vec<AnchorGrowth>,
-    /// Which stage the depth count fell in.
+    /// Which stage [`GrowthRequest::time`] fell in.
     pub stage: usize,
     /// How far the host's body size has drifted from the size the geometry was
     /// tuned at. Reported so a host can size its own debug overlay in step.
@@ -158,7 +166,7 @@ impl Scriptorium {
         } else {
             &req.stages
         };
-        let stage = growth_stage(req.confirmations, stages);
+        let stage = growth_stage(req.time, stages);
 
         let base_size = if req.base_size > 0.0 { req.base_size } else { params.reference_font_size };
         let geometry_scale = if params.reference_font_size > 0.0 {
@@ -273,7 +281,7 @@ mod tests {
     fn one_mark_page() -> GrowthRequest {
         GrowthRequest {
             seed: "00000000000000000009a5b2b9c4de6c9c1c9b3e9e9a5b2b9c4de6c9c1c9b3e".to_string(),
-            confirmations: 5000.0,
+            time: 5000.0,
             host: Rect::new(0.0, 0.0, 600.0, 400.0),
             page: Some(Rect::new(-40.0, -40.0, 680.0, 480.0)),
             obstacles: vec![Rect::new(40.0, 200.0, 300.0, 14.0)],
@@ -293,7 +301,7 @@ mod tests {
     fn a_bare_stage_grows_nothing_at_all() {
         let mut e = Scriptorium::new();
         let mut req = one_mark_page();
-        req.confirmations = 0.0;
+        req.time = 0.0;
         let out = e.illuminate(&req);
         assert_eq!(out.stage, 0);
         assert!(out.anchors.is_empty());

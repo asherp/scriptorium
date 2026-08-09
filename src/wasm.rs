@@ -80,15 +80,15 @@ pub fn reset_derivations() {
     ENGINE.with(|e| e.borrow_mut().reset_derivations());
 }
 
-/// Which stage a depth count falls in. Pass `null` for the default ladder.
+/// Which stage a `time` falls in. Pass `null` for the default ladder.
 #[wasm_bindgen(js_name = growthStage)]
-pub fn growth_stage(confirmations: f64, stages: JsValue) -> Result<usize, JsValue> {
+pub fn growth_stage(time: f64, stages: JsValue) -> Result<usize, JsValue> {
     let stages: Vec<GrowthStage> = if stages.is_undefined() || stages.is_null() {
         default_growth_stages()
     } else {
         from_js(stages, "stages")?
     };
-    Ok(bucket(confirmations, &stages))
+    Ok(bucket(time, &stages))
 }
 
 /// The extra generations a mark's own rendered size earns it.
