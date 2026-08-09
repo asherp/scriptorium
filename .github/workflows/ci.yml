@@ -1,0 +1,58 @@
+name: CI
+
+# The whole suite on every change, on a bare checkout. The engine measures
+# nothing and draws nothing, so there is no browser, no font and no fixture to
+# arrange: `cargo test` is the suite, and it finishes in seconds.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Test (native)
+        run: cargo test --all-features
+
+      - name: Lint
+        run: cargo clippy --all-targets -- -D warnings
+
+  # The web build is what a host page actually consumes, and it is a different
+  # target with a different feature set — a crate that passes its native tests
+  # can still fail to compile for wasm32. Cheap enough to guard on every change.
+  wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      # NOTE: do not install a system `wasm-opt` here. wasm-pack uses its own
+      # bundled wasm-opt and runs the size pass configured under
+      # [package.metadata.wasm-pack.profile.release] in Cargo.toml; a system
+      # binary gets picked up instead and can reject modern wasm features.
+      - name: Build for the web
+        run: wasm-pack build --target web --no-default-features --features wasm
+
+      - name: Report artifact size
+        run: |
+          echo "scriptorium_bg.wasm: $(wc -c < pkg/scriptorium_bg.wasm) B"
