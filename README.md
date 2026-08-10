@@ -36,6 +36,15 @@ In the order it binds:
 - **The glyph**, which a vine leaves by riding its own outer contour, forking
   away where following it further would close the letter back onto the trail
   just drawn. Counters are holes, not edges, and are never ridden.
+- **The block**, for a mark that names one: the convex hull of a paragraph's
+  own LETTERS — their outlines, not the boxes they sit in — is the silhouette
+  it presents to the page, and growth rides it counter-clockwise from wherever
+  the hull comes nearest the mark, which for a mark opening its line is the
+  point the hull is touching. This is the border a scribe rules around a
+  paragraph rather than the flourish that leaves an initial. The ragged end of
+  a short last line is inside that silhouette, not traced by it, and the ring
+  is ruled clear of the writing so that a vine riding it is not blocked by the
+  paragraph it wraps.
 - **The text**, as one padded rectangle per term the host laid out. Growth
   traces those boxes' silhouettes the way a scribe's vine runs between the
   lines — per term, not per line, so the channel between two lines and the
@@ -48,7 +57,7 @@ In the order it binds:
 ## Using it
 
 ```rust
-use scriptorium::{AnchorMode, GrowthRequest, Scriptorium, Params, Rect, Seed};
+use scriptorium::{AnchorMode, Glyph, GrowthRequest, Scriptorium, Params, Rect, Seed};
 
 let mut engine = Scriptorium::new();
 
@@ -63,6 +72,14 @@ let out = engine.illuminate(&GrowthRequest {
     host: Rect::new(0.0, 0.0, 600.0, 400.0),
     page: Some(Rect::new(-40.0, -40.0, 680.0, 480.0)),
     obstacles: vec![Rect::new(40.0, 200.0, 300.0, 14.0)],
+    // The page's blocks, each one the characters the host laid out in it and
+    // where each puts ink. A mark that names its block grows by riding that
+    // block's silhouette, counter-clockwise, instead of by tracing its own
+    // letterform. A character with no outline registered wraps by its box.
+    blocks: vec![vec![
+        Glyph::new("□", Rect::new(40.0, 201.0, 10.0, 11.0)),
+        Glyph::new("□", Rect::new(52.0, 201.0, 10.0, 11.0)),
+    ]],
     seeds: vec![Seed {
         box_rect: Rect::new(300.0, 180.0, 10.0, 14.0),
         mark_rect: Some(Rect::new(300.0, 180.0, 10.0, 14.0)),
@@ -70,6 +87,7 @@ let out = engine.illuminate(&GrowthRequest {
         ch: Some("□".to_string()),
         ink_box: Some(Rect::new(300.0, 181.0, 10.0, 11.0)),
         size: None,
+        block: None, // `Some(0)` to run the border instead
     }],
     base_size: 16.0,
     params: Params::default(),
@@ -114,17 +132,31 @@ It is worth having as more than a demo, because it makes the split above
 visible. The panel labels each knob **grammar** or **turtle** and clears the
 derivation cache only for the first kind; drag the column narrower or scale the
 type and the readout's symbol string does not move, while the vine relaxes into
-its new measure. Click any word to grow a vine off it. The debug overlays draw
-the padded obstacle field, the bounds, the leashes, and the contour the vine is
-riding.
+its new measure. The debug overlays draw the padded obstacle field, the bounds,
+the block silhouettes, and the contours the vines are riding.
 
-Everything DOM-shaped lives in the host, as the contract requires. `web/` lays
-the prose out one span per term and measures those boxes back, works out where
-a mark's ink actually sits inside its line box from canvas font metrics, and —
-since a browser will not hand over a font's contours — gets its glyph outlines
-by rasterizing the character and tracing the boundary between ink and paper.
-The engine is handed rectangles and a unit-square path, exactly as a PDF
-renderer or a plotter would hand it the same.
+Its notation is Bitcoin Script, one mark per opcode — `⧉` for DUP, `⌖` for
+HASH160, `∇` for CHECKSIG, all 110 of them. Every mark is a seed, the list is
+a reader's to edit an opcode or a whole group at a time, and any word can be
+made a mark or unmade with a click. That the engine has no idea any of this is
+happening is the point: it is handed rectangles, and what those rectangles mean
+stays in the host.
+
+Everything DOM-shaped lives there too, as the contract requires. `web/` lays
+the page out one paragraph per block and one span per term, measures those
+boxes back, works out where each rendered CHARACTER puts ink — neither box the
+DOM will hand over is the ink, so the metrics come from a canvas and the range
+rectangle only anchors them — and, since a browser will not hand over a font's
+contours, gets its glyph outlines by rasterizing each character and tracing the
+boundary between ink and paper. The engine is handed rectangles and
+unit-square paths, exactly as a PDF renderer or a plotter would hand it the
+same.
+
+Two knobs are worth knowing about when growing borders rather than flourishes.
+**follow steps** caps how far a vine rides its rail, and a letterform's couple
+of dozen steps is nothing like a paragraph's two hundred. **border margin** is
+how far outside the text the silhouette is ruled, and it has to clear a line's
+leading, not just its ink, wherever the obstacle field is per term.
 
 ## License
 

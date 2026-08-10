@@ -34,8 +34,24 @@ export function fontString(face, px) {
  * Ink metrics for one character, in px at `px`: how far the glyph's ink
  * reaches from the drawing origin, which is the baseline at the start of the
  * advance.
+ *
+ * Memoized. A block's silhouette asks for this once per rendered character on
+ * every layout pass — a page of prose is hundreds of calls a frame — and the
+ * answer depends on nothing but the character and the face it is set in.
  */
+const metricsCache = new Map();
+
 export function inkMetrics(ch, face, px) {
+  const key = `${face.style}|${face.weight}|${face.family}|${px}|${ch}`;
+  let m = metricsCache.get(key);
+  if (!m) {
+    m = measureInk(ch, face, px);
+    metricsCache.set(key, m);
+  }
+  return m;
+}
+
+function measureInk(ch, face, px) {
   const ctx = scratch();
   ctx.font = fontString(face, px);
   const m = ctx.measureText(ch);
@@ -66,6 +82,7 @@ export function outlineFor(ch, face) {
 
 export function clearOutlineCache() {
   cache.clear();
+  metricsCache.clear();
 }
 
 let scratchCanvas = null;

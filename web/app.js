@@ -7,39 +7,40 @@
 // — is a pure function of (seed, stage) and is cached forever; drag the column
 // narrower or scale the type and the readout's symbol string does not move.
 // The TURTLE interpretation — where those branches land, which ones a line of
-// text pushed aside — is recomputed from the host's own measured rectangles on
-// every pass. Two knob kinds, two clearing rules, and the panel labels which
-// is which.
+// text pushed aside, which silhouette a border ran — is recomputed from the
+// host's own measured rectangles on every pass. Two knob kinds, two clearing
+// rules, and the panel labels which is which.
 
 import init, * as engine from './pkg/scriptorium.js';
-import { buildParamGroups, buildProductions, buildStages } from './controls.js';
-import { measure, obstaclesFrom, renderProse, seedsFrom } from './measure.js';
+import { buildNotation, buildParamGroups, buildProductions, buildStages } from './controls.js';
+import { blocksFrom, markedTerms, measure, obstaclesFrom, renderProse, seedsFrom } from './measure.js';
+import { DEFAULT_TEXT, NOTATION, marksByLength } from './notation.js';
 import { clearOutlineCache } from './trace.js';
 
 const $ = (id) => document.getElementById(id);
-
-const DEFAULT_TEXT = `Beauty sue to tap out a tired roof, and the scribe who ruled these lines
-had no thought of the vine that would find them. A margin is not empty; it is
-the part of the page that has not yet been asked a question.
-
-Growth answers to the glyph it left, to the text it runs between, to the edge
-of the page it may not cross, and to the leash that keeps it belonging to the
-mark it grew from. Nothing here is drawn twice the same way by two different
-seeds, and nothing here is drawn differently twice by the same one.`;
+const ALL_MARKS = marksByLength();
 
 const state = {
   seed: randomSeed(),
-  confirmations: 5000,
+  // A page whose every opcode is a mark grows a great many vines at once, so
+  // it opens partway up the ladder rather than at the top of it: the marks
+  // read as marks, and the depth is one drag from illuminated.
+  confirmations: 6,
   fontSize: 17,
   columnWidth: 520,
   dropCapEm: 3.4,
   anchorMode: 'edge',
   usePage: true,
   rideGlyph: true,
+  rideBlock: true,
+  dropCapIsMark: true,
   strokeWidth: 1.1,
   text: DEFAULT_TEXT,
-  marked: new Set(['0']),
-  show: { leaves: true, obstacles: false, bounds: false, anchors: false, outline: false },
+  /// Opcodes switched OFF by name. Empty means the whole notation is live.
+  disabledOps: new Set(),
+  /// Terms the reader has overridden by clicking, either way.
+  manual: new Map(),
+  show: { leaves: true, obstacles: false, bounds: false, anchors: false, outline: false, hulls: true },
   params: null,
   stages: null,
   termEls: [],
@@ -72,6 +73,7 @@ async function boot() {
 
   wire();
   mountControls();
+  buildNotation($('notation'), NOTATION, state, schedule);
   layoutText();
   $('boot').classList.add('gone');
   schedule();
@@ -124,16 +126,20 @@ function wire() {
   });
 
   bindCheck('use-page', (on) => (state.usePage = on));
+  bindCheck('ride-block', (on) => (state.rideBlock = on), regrow);
   bindCheck('ride-glyph', (on) => (state.rideGlyph = on));
+  bindCheck('dropcap-mark', (on) => (state.dropCapIsMark = on));
   bindCheck('show-leaves', (on) => (state.show.leaves = on));
   bindCheck('show-obstacles', (on) => (state.show.obstacles = on));
   bindCheck('show-bounds', (on) => (state.show.bounds = on));
   bindCheck('show-anchors', (on) => (state.show.anchors = on));
   bindCheck('show-outline', (on) => (state.show.outline = on));
+  bindCheck('show-hulls', (on) => (state.show.hulls = on));
 
   $('text').value = state.text;
   $('text').addEventListener('input', () => {
     state.text = $('text').value;
+    state.manual.clear(); // term indices no longer mean what they meant
     layoutText();
     schedule();
   });
@@ -162,9 +168,7 @@ function wire() {
     const term = e.target.closest('.term');
     if (!term) return;
     const key = term.dataset.index;
-    if (state.marked.has(key)) state.marked.delete(key);
-    else state.marked.add(key);
-    term.classList.toggle('marked', state.marked.has(key));
+    state.manual.set(key, !term.classList.contains('marked'));
     regrow();
   });
 
@@ -193,7 +197,7 @@ function bindNumber(id, key, after) {
   });
 }
 
-/** A new source or a new depth: what grew changed, so draw it growing. */
+/** A new source, a new depth, a new mark: what grew changed, so draw it growing. */
 function regrow() {
   animateNext = true;
   schedule();
@@ -217,11 +221,11 @@ function pairSlider(id, key, after) {
   num.addEventListener('input', () => write(num.value));
 }
 
-function bindCheck(id, set) {
+function bindCheck(id, set, after) {
   const el = $(id);
   el.addEventListener('change', () => {
     set(el.checked);
-    schedule();
+    (after ?? schedule)();
   });
 }
 
@@ -245,16 +249,12 @@ function applyPageStyle() {
   const column = $('column');
   column.style.width = `${state.columnWidth}px`;
   column.style.fontSize = `${state.fontSize}px`;
-  document.documentElement.style.setProperty('--dropcap-em', String(state.dropCapEm));
   const cap = column.querySelector('.is-dropcap');
   if (cap) cap.style.fontSize = `${state.dropCapEm}em`;
 }
 
 function layoutText() {
   state.termEls = renderProse($('column'), state.text, { dropCap: true });
-  for (const el of state.termEls) {
-    el.classList.toggle('marked', state.marked.has(el.dataset.index));
-  }
   applyPageStyle();
 }
 
@@ -270,10 +270,19 @@ function schedule() {
 
 function grow() {
   const layout = measure($('page'), $('column'), state.termEls);
-  const { seeds, marks, outlines } = seedsFrom(layout, state.marked, engine, {
-    mode: state.anchorMode,
-    rideGlyph: state.rideGlyph,
+
+  // Which terms are marks: the notation decides, a click overrides.
+  const marks = ALL_MARKS.filter((m) => !state.disabledOps.has(m.name));
+  const marked = markedTerms(layout, marks, {
+    dropCap: state.dropCapIsMark,
+    manual: state.manual,
   });
+  for (const el of state.termEls) el.classList.toggle('marked', marked.has(el.dataset.index));
+
+  // The blocks, as characters and where each one puts ink — which is what the
+  // silhouette is a hull of. The outlines come with them: without the letters'
+  // own contours the ring would wrap the boxes they sit in instead.
+  const { blocks, outlines } = blocksFrom(layout, { rideGlyph: state.rideGlyph });
 
   // Replacing the table drops the engine's cached sampling with it, so only
   // hand it over when it has actually changed.
@@ -283,12 +292,18 @@ function grow() {
     appliedOutlines = key;
   }
 
+  const { seeds, details } = seedsFrom(layout, marked, engine, {
+    mode: state.anchorMode,
+    rideBlock: state.rideBlock,
+  });
+
   const request = {
     seed: state.seed,
     confirmations: state.confirmations,
     host: layout.host,
     page: state.usePage ? layout.page : null,
-    obstacles: obstaclesFrom(layout, state.marked),
+    obstacles: obstaclesFrom(layout, marked),
+    blocks,
     seeds,
     baseSize: state.fontSize,
     params: state.params,
@@ -306,20 +321,19 @@ function grow() {
   }
   const ms = performance.now() - t0;
 
-  draw(out, layout, marks);
-  report(out, request, ms);
+  draw(out, layout, blocks, outlines);
+  report(out, request, details, ms);
 }
 
 /* ── drawing ────────────────────────────────────────────────────────── */
 
-function draw(out, layout, marks) {
+function draw(out, layout, blocks, outlines) {
   const svg = $('growth');
   const p = layout.page;
   svg.setAttribute('viewBox', `${r(p.x)} ${r(p.y)} ${r(p.w)} ${r(p.h)}`);
   svg.setAttribute('width', r(p.w));
   svg.setAttribute('height', r(p.h));
-  svg.style.left = '0';
-  svg.style.top = '0';
+  svg.style.inset = '0';
   svg.style.width = '100%';
   svg.style.height = '100%';
 
@@ -332,13 +346,23 @@ function draw(out, layout, marks) {
     parts.push('</g>');
   }
   if (state.show.bounds) parts.push(rect(out.bounds, 'dbg-bounds'));
+  if (state.show.hulls) {
+    for (const hull of out.hulls) {
+      if (hull.length < 3) continue;
+      const d = hull.map((q, i) => `${i ? 'L' : 'M'}${r(q.x)},${r(q.y)}`).join(' ');
+      parts.push(`<path class="dbg-hull" d="${d} Z"/>`);
+    }
+  }
   if (state.show.outline) {
-    for (const m of marks) {
-      if (!m.outline || !m.inkBox) continue;
-      parts.push(
-        `<g transform="translate(${r(m.inkBox.x)},${r(m.inkBox.y)}) scale(${r(m.inkBox.w)},${r(m.inkBox.h)})">` +
-          `<path class="dbg-outline" vector-effect="non-scaling-stroke" d="${m.outline}"/></g>`
-      );
+    for (const block of blocks) {
+      for (const g of block) {
+        const d = outlines[g.ch];
+        if (!d || !(g.box.w > 0) || !(g.box.h > 0)) continue;
+        parts.push(
+          `<g transform="translate(${r(g.box.x)},${r(g.box.y)}) scale(${r(g.box.w)},${r(g.box.h)})">` +
+            `<path class="dbg-outline" vector-effect="non-scaling-stroke" d="${d}"/></g>`
+        );
+      }
     }
   }
 
@@ -346,9 +370,7 @@ function draw(out, layout, marks) {
     parts.push('<g class="anchor">');
     for (const seg of a.segments) {
       if (seg.d) {
-        parts.push(
-          `<path class="vine" pathLength="1" stroke-width="${r(stroke)}" d="${seg.d}"/>`
-        );
+        parts.push(`<path class="vine" pathLength="1" stroke-width="${r(stroke)}" d="${seg.d}"/>`);
       }
       if (!state.show.leaves) continue;
       for (const leaf of seg.leaves) {
@@ -361,11 +383,6 @@ function draw(out, layout, marks) {
       }
     }
     if (state.show.anchors) {
-      const reach = Math.max(
-        state.params.maxReachFloor * out.geometryScale,
-        (a.size > 0 ? a.size : 16) * state.params.maxReachMul
-      );
-      parts.push(`<circle class="dbg-leash" cx="${r(a.x)}" cy="${r(a.y)}" r="${r(reach)}"/>`);
       parts.push(`<circle class="dbg-anchor" cx="${r(a.x)}" cy="${r(a.y)}" r="2.5"/>`);
     }
     parts.push('</g>');
@@ -407,7 +424,9 @@ function replay() {
   void svg.getBoundingClientRect();
   const vines = svg.querySelectorAll('.vine');
   const leaves = svg.querySelectorAll('.leaf');
-  vines.forEach((el, i) => (el.style.animationDelay = `${((i / Math.max(1, vines.length)) * REPLAY_SECONDS).toFixed(3)}s`));
+  vines.forEach((el, i) => {
+    el.style.animationDelay = `${((i / Math.max(1, vines.length)) * REPLAY_SECONDS).toFixed(3)}s`;
+  });
   leaves.forEach((el, i) => {
     const at = (i / Math.max(1, leaves.length)) * REPLAY_SECONDS;
     el.style.animationDelay = `${(at + 0.25).toFixed(3)}s`;
@@ -417,7 +436,7 @@ function replay() {
 
 /* ── readout ────────────────────────────────────────────────────────── */
 
-function report(out, request, ms) {
+function report(out, request, details, ms) {
   const stage = state.stages[out.stage];
   $('stage-chip').textContent = stage ? `${out.stage} · ${stage.name}` : `stage ${out.stage}`;
 
@@ -432,12 +451,19 @@ function report(out, request, ms) {
     segments += a.segments.length;
     for (const s of a.segments) leaves += s.leaves.length;
   }
+  const bordered = request.seeds.filter((s) => s.block !== null && s.block !== undefined).length;
+  const glyphs = request.blocks.reduce((n, b) => n + b.length, 0);
 
   const rows = [
     ['stage', stage ? `${out.stage} (${stage.name})` : String(out.stage)],
-    ['rewritings', String((stage?.iterations ?? 0) + boost) + (boost ? ` (${stage?.iterations ?? 0} + ${boost} boost)` : '')],
-    ['symbol', `${symbol.length} chars, ${count(symbol, 'F')} F, ${count(symbol, '[')} branches, ${count(symbol, 'L')} L`],
-    ['anchors', `${out.anchors.length} of ${request.seeds.length} seed${request.seeds.length === 1 ? '' : 's'}`],
+    [
+      'rewritings',
+      String((stage?.iterations ?? 0) + boost) +
+        (boost ? ` (${stage?.iterations ?? 0} + ${boost} boost)` : ''),
+    ],
+    ['symbol', `${symbol.length} chars, ${count(symbol, 'F')} F, ${count(symbol, '[')} branches`],
+    ['marks', `${out.anchors.length}, ${bordered} riding a border`],
+    ['blocks', `${out.hulls.length}, ${glyphs} glyphs, ${out.hulls.map((h) => h.length).join('/') || '—'} corners`],
     ['drawn', `${segments} segments, ${leaves} leaves`],
     ['obstacles', String(out.obstacles.length)],
     ['geometry scale', out.geometryScale.toFixed(3)],
@@ -447,7 +473,14 @@ function report(out, request, ms) {
     .map(([k, v]) => `<dt>${k}</dt><dd>${escapeHtml(v)}</dd>`)
     .join('');
 
-  const shown = symbol.length > 6000 ? `${symbol.slice(0, 6000)}\n… ${symbol.length - 6000} more` : symbol;
+  const named = details
+    .map((d) => d.text.slice(0, 6))
+    .slice(0, 24)
+    .join(' ');
+  $('marks-readout').textContent = named || '(no marks on the page)';
+
+  const shown =
+    symbol.length > 6000 ? `${symbol.slice(0, 6000)}\n… ${symbol.length - 6000} more` : symbol;
   $('symbol').textContent = shown || '(nothing — a bare stage grows nothing at all)';
 }
 
@@ -470,7 +503,7 @@ function downloadSvg() {
     .vine { fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; }
     .blade { fill: currentColor; opacity: .85; }
     .vein { fill: none; stroke: ${cs.getPropertyValue('--paper').trim()}; opacity: .6; }
-    .dbg-obstacle, .dbg-bounds, .dbg-leash, .dbg-anchor, .dbg-outline { display: none; }`;
+    .dbg-obstacle, .dbg-bounds, .dbg-anchor, .dbg-outline, .dbg-hull { display: none; }`;
   svg.prepend(style);
   for (const el of svg.querySelectorAll('[style]')) el.removeAttribute('style');
 

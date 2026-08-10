@@ -38,16 +38,17 @@ export const PARAM_GROUPS = [
       ['obstaclePad', 'obstacle halo (px)', 0, 20, 0.5, 'Padding around every term box.'],
       ['boundsInset', 'page inset (px)', 0, 40, 0.5, "How far inside the page's edge growth stops."],
       ['overflow', 'overflow (px)', 0, 200, 1, 'Bound used when there is no page to ask.'],
-      ['maxReachFloor', 'leash floor (px)', 0, 400, 5, "The leash's minimum radius."],
+      ['maxReachFloor', 'leash floor (px)', 0, 1200, 5, "The leash's minimum radius. A mark riding a block overrides it upward to that block's own reach."],
       ['maxReachMul', 'leash × size', 0, 8, 0.1, "The leash's radius per px of the mark's own size."],
+      ['hullMargin', 'border margin', 0, 60, 0.5, "How far outside the halo a block's silhouette is ruled. It has to clear the line's leading, not just the ink."],
     ],
   },
   {
-    title: 'Riding the glyph',
+    title: 'Riding a rail',
     kind: 'turtle',
-    note: "How a vine leaves the letter it grew from.",
+    note: 'How a vine runs the line it grew from — a letterform, or a block\'s silhouette — and how it leaves it. A letter is a couple of dozen steps around; a paragraph is nearer two hundred.',
     knobs: [
-      ['glyphFollowMax', 'follow steps', 0, 120, 1, 'How long the opening run may trace the seed glyph.'],
+      ['glyphFollowMax', 'follow steps', 0, 600, 1, 'How long the opening run may trace its rail. Raise it to run a whole block.'],
       ['glyphClearanceMul', 'clearance × step', 0, 3, 0.05, 'How near its own trail counts as crossing itself.'],
       ['glyphDepartDeg', 'depart (°)', 0, 180, 1, 'How sharply the vine turns away when it leaves.'],
       ['departForkSteps', 'depart fork steps', 0, 20, 1, 'Length of the shoot left behind at the departure. 0 disables it.'],
@@ -214,6 +215,85 @@ export function buildStages(root, state, onChange) {
   };
   render();
   return render;
+}
+
+/**
+ * The notation: which marks this page grows from.
+ *
+ * Every opcode is on by default and any of them can be switched off, one at a
+ * time or a whole group at once. Nothing here is the engine's business — it
+ * only ever sees the rectangles the marks the host settled on were measured
+ * at — which is exactly why it can be a list a reader edits.
+ */
+export function buildNotation(root, notation, state, onChange) {
+  root.textContent = '';
+
+  const bar = document.createElement('div');
+  bar.className = 'note-bar';
+  for (const [label, off] of [['all', false], ['none', true]]) {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.addEventListener('click', () => {
+      state.disabledOps.clear();
+      if (off) for (const g of notation) for (const [, name] of g.ops) state.disabledOps.add(name);
+      render();
+      onChange();
+    });
+    bar.append(b);
+  }
+  root.append(bar);
+
+  const groups = [];
+  const render = () => {
+    for (const { box, chips, ops } of groups) {
+      const on = ops.filter(([, name]) => !state.disabledOps.has(name)).length;
+      box.querySelector('.count').textContent = `${on}/${ops.length}`;
+      box.querySelector('input').checked = on > 0;
+      box.querySelector('input').indeterminate = on > 0 && on < ops.length;
+      for (const chip of chips) {
+        chip.classList.toggle('off', state.disabledOps.has(chip.dataset.name));
+      }
+    }
+  };
+
+  for (const { group, ops } of notation) {
+    const box = document.createElement('div');
+    box.className = 'notation-group';
+    const head = document.createElement('label');
+    head.className = 'check';
+    head.innerHTML = `<input type="checkbox"> <span>${group}</span> <span class="count"></span>`;
+    head.querySelector('input').addEventListener('change', (e) => {
+      for (const [, name] of ops) {
+        if (e.target.checked) state.disabledOps.delete(name);
+        else state.disabledOps.add(name);
+      }
+      render();
+      onChange();
+    });
+    box.append(head);
+
+    const row = document.createElement('div');
+    row.className = 'ops';
+    const chips = ops.map(([mark, name]) => {
+      const chip = document.createElement('button');
+      chip.className = 'op';
+      chip.dataset.name = name;
+      chip.textContent = mark;
+      chip.title = name;
+      chip.addEventListener('click', () => {
+        if (state.disabledOps.has(name)) state.disabledOps.delete(name);
+        else state.disabledOps.add(name);
+        render();
+        onChange();
+      });
+      row.append(chip);
+      return chip;
+    });
+    box.append(row);
+    root.append(box);
+    groups.push({ box, chips, ops });
+  }
+  render();
 }
 
 function escapeAttr(s) {

@@ -61,8 +61,24 @@
       </div>
       <label class="check"><input type="checkbox" id="use-page" checked> bound growth by the page</label>
       <label class="check"><input type="checkbox" id="ride-glyph" checked> trace glyph outlines from the font</label>
-      <textarea id="text" rows="6" spellcheck="false"></textarea>
-      <p class="note">Click any word in the page to grow a vine off it.</p>
+      <label class="check"><input type="checkbox" id="ride-block" checked> run the block's silhouette</label>
+      <label class="check"><input type="checkbox" id="dropcap-mark" checked> the drop cap is a mark too</label>
+      <textarea id="text" rows="7" spellcheck="false"></textarea>
+      <p class="note">
+        A blank line starts a new block. Click any word to make it a mark, or
+        unmake one.
+      </p>
+    </details>
+
+    <details class="group" open>
+      <summary>Notation</summary>
+      <p class="note">
+        The marks this page grows from — one per opcode, all 110 of them. A
+        term opening with an enabled mark is a seed; growth runs its block's
+        silhouette counter-clockwise from the point that silhouette touches it.
+      </p>
+      <div id="notation"></div>
+      <p class="note">on the page: <span id="marks-readout" class="marks"></span></p>
     </details>
 
     <div id="params"></div>
@@ -86,10 +102,11 @@
     <details class="group" open>
       <summary>Show</summary>
       <label class="check"><input type="checkbox" id="show-leaves" checked> leaves</label>
+      <label class="check"><input type="checkbox" id="show-hulls" checked> block silhouettes</label>
       <label class="check"><input type="checkbox" id="show-obstacles"> obstacle field (padded)</label>
       <label class="check"><input type="checkbox" id="show-bounds"> bounds</label>
-      <label class="check"><input type="checkbox" id="show-anchors"> anchors and leashes</label>
-      <label class="check"><input type="checkbox" id="show-outline"> traced glyph outline</label>
+      <label class="check"><input type="checkbox" id="show-anchors"> anchors</label>
+      <label class="check"><input type="checkbox" id="show-outline"> traced glyph outlines</label>
       <div class="knob">
         <label><span>stroke (px)</span></label>
         <input id="stroke" type="range" min="0.3" max="4" step="0.1">

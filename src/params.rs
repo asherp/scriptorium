@@ -67,19 +67,42 @@ pub struct Params {
     /// How far inside the page's own edge growth stops, given one.
     pub bounds_inset: f64,
     /// The leash's minimum radius from an anchor.
+    ///
+    /// A mark riding a block's silhouette overrides this upward to that
+    /// silhouette's own reach: a border belongs to the paragraph it wraps, so
+    /// stopping it short of one would read as a failure rather than as
+    /// restraint.
     pub max_reach_floor: f64,
     /// The leash's radius per px of the anchor's own size.
     pub max_reach_mul: f64,
+    /// How far OUTSIDE the obstacle halo a block's silhouette is ruled, in px.
+    ///
+    /// A border ruled on the writing itself is a border no vine can ride: it
+    /// would be blocked by the very text it wraps on its first step. The ring
+    /// is the letters' own hull grown by [`Params::obstacle_pad`] plus this
+    /// (see [`crate::block_hull`]).
+    ///
+    /// The default clears a body line's LEADING as well as the halo, which is
+    /// what it has to do wherever a host's obstacle field is per term rather
+    /// than per letter: a line's box stands several pixels above its tallest
+    /// ascender and below its deepest descender, and a ring that only cleared
+    /// the ink would be inside the box.
+    pub hull_margin: f64,
 
-    // ── riding the glyph's own outline ────────────────────────────────────
-    /// How many steps the opening run may spend tracing the seed glyph — a
-    /// closed contour would otherwise carry it all the way round and back
-    /// onto its own trail.
+    // ── riding a rail: a glyph's outline, or a block's silhouette ─────────
+    /// How many steps the opening run may spend tracing its rail — a closed
+    /// ring would otherwise carry it all the way round and back onto its own
+    /// trail.
+    ///
+    /// A letterform is a couple of dozen steps around. A paragraph's
+    /// silhouette is nearer two hundred, so a host that grows vines along
+    /// blocks rather than letters wants this considerably higher than the
+    /// default a glyph asks for.
     pub glyph_follow_max: u32,
     /// How near (in step-lengths) its own earlier trail has to come before
     /// the ride counts as about to cross itself.
     pub glyph_clearance_mul: f64,
-    /// How sharply the vine turns away from the letter when it leaves.
+    /// How sharply the vine turns away from its rail when it leaves.
     pub glyph_depart_deg: f64,
     /// Where it leaves, it FORKS: a shoot this many steps long carries on at
     /// twice the departure angle. 0 disables it, leaving a plain departure.
@@ -116,6 +139,7 @@ impl Default for Params {
             bounds_inset: 2.0,
             max_reach_floor: 80.0,
             max_reach_mul: 1.8,
+            hull_margin: 10.0,
 
             glyph_follow_max: 26,
             glyph_clearance_mul: 0.9,

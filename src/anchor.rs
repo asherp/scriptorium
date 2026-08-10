@@ -24,6 +24,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::contour::outer_contours;
 use crate::geom::{angle_diff, edge_point, Point, Rect};
+use crate::hull::rail_along;
 use crate::path::sample_subpaths;
 use crate::turtle::{Anchor, Rail};
 
@@ -72,6 +73,16 @@ pub struct Seed {
     /// carries the line's leading above and below the letter and spans every
     /// character in the mark.
     pub ink_box: Option<Rect>,
+    /// Which block of text this mark sits in, as an index into
+    /// [`crate::GrowthRequest::blocks`].
+    ///
+    /// Given one, growth rides that block's own silhouette rather than the
+    /// letterform's — the border a scribe rules around a paragraph rather than
+    /// the flourish that leaves a single initial — starting where the hull
+    /// comes nearest the mark and travelling counter-clockwise. A mark with no
+    /// block, or one naming a block the host did not send, falls back to its
+    /// glyph's contour exactly as before.
+    pub block: Option<usize>,
 }
 
 /// The glyph outlines a host has registered, plus the sampled contours derived
@@ -87,6 +98,7 @@ pub struct Seed {
 pub struct Outlines {
     paths: HashMap<String, String>,
     contours: HashMap<String, Vec<Vec<Point>>>,
+    hulls: HashMap<String, Vec<Point>>,
 }
 
 impl Outlines {
@@ -98,11 +110,13 @@ impl Outlines {
     pub fn set(&mut self, paths: HashMap<String, String>) {
         self.paths = paths;
         self.contours.clear();
+        self.hulls.clear();
     }
 
     pub fn insert(&mut self, ch: impl Into<String>, d: impl Into<String>) {
         let ch = ch.into();
         self.contours.remove(&ch);
+        self.hulls.remove(&ch);
         self.paths.insert(ch, d.into());
     }
 
@@ -128,6 +142,22 @@ impl Outlines {
             self.contours.insert(ch.to_string(), sampled);
         }
         self.contours.get(ch).filter(|c| !c.is_empty())
+    }
+
+    /// The convex hull of a character's own outline, in the unit square it was
+    /// stored in.
+    ///
+    /// Cached, and worth caching: a block's silhouette asks for this once per
+    /// rendered character on every layout pass, while the answer depends on
+    /// nothing but the letterform. It also shrinks the work enormously —
+    /// hulling a hull gives the same ring as hulling every sample, so a page
+    /// of prose costs a dozen points per character rather than two hundred.
+    pub(crate) fn unit_hull(&mut self, ch: &str) -> Option<&Vec<Point>> {
+        if !self.hulls.contains_key(ch) {
+            let pts: Vec<Point> = self.unit_contours(ch)?.iter().flatten().copied().collect();
+            self.hulls.insert(ch.to_string(), crate::hull::convex_hull(pts));
+        }
+        self.hulls.get(ch).filter(|h| h.len() >= 3)
     }
 }
 
@@ -201,7 +231,18 @@ pub fn rail_for(
 }
 
 /// Turns the host's measured marks into anchors ready to grow from.
-pub fn resolve_anchors(seeds: &[Seed], host: &Rect, outlines: &mut Outlines) -> Vec<Anchor> {
+///
+/// `hulls` are the page's block silhouettes, in the order the host sent the
+/// blocks, and `rail_spacing` is how finely one is sampled for riding. A mark
+/// naming a block rides that block's hull; the rest ride their own letterform,
+/// and a mark with neither falls back to its plain bounding-box edge.
+pub fn resolve_anchors(
+    seeds: &[Seed],
+    host: &Rect,
+    outlines: &mut Outlines,
+    hulls: &[Vec<Point>],
+    rail_spacing: f64,
+) -> Vec<Anchor> {
     let cx = host.w / 2.0;
     let cy = host.h / 2.0;
     seeds
@@ -249,12 +290,20 @@ pub fn resolve_anchors(seeds: &[Seed], host: &Rect, outlines: &mut Outlines) -> 
             let mut growth_angle = angle;
             let mut rail = None;
             if seed.mode == AnchorMode::Edge {
-                let found = match (seed.ch.as_deref(), seed.ink_box.as_ref()) {
-                    (Some(ch), Some(ink)) if !ch.is_empty() => {
-                        rail_for(outlines, first_char(ch), ink, x, y, angle)
-                    }
-                    _ => None,
-                };
+                // The block's silhouette first, where the mark names one: a
+                // vine that has a border to run answers to the border, and
+                // only a mark with no block of its own is left to grow off its
+                // letterform.
+                let found = seed
+                    .block
+                    .and_then(|i| hulls.get(i))
+                    .and_then(|hull| rail_along(hull, rail_spacing, x, y))
+                    .or_else(|| match (seed.ch.as_deref(), seed.ink_box.as_ref()) {
+                        (Some(ch), Some(ink)) if !ch.is_empty() => {
+                            rail_for(outlines, first_char(ch), ink, x, y, angle)
+                        }
+                        _ => None,
+                    });
                 match found {
                     Some(r) => {
                         growth_angle = r.tangent;
@@ -275,7 +324,7 @@ pub fn resolve_anchors(seeds: &[Seed], host: &Rect, outlines: &mut Outlines) -> 
 /// Outlines are keyed by single characters; a host that hands over a whole
 /// mark gets its leading character looked up, which is the one a vine grows
 /// off.
-fn first_char(s: &str) -> &str {
+pub(crate) fn first_char(s: &str) -> &str {
     match s.char_indices().nth(1) {
         Some((i, _)) => &s[..i],
         None => s,
@@ -351,7 +400,7 @@ mod tests {
             mode: AnchorMode::Edge,
             ..Default::default()
         };
-        let a = &resolve_anchors(&[seed], &host, &mut Outlines::new())[0];
+        let a = &resolve_anchors(&[seed], &host, &mut Outlines::new(), &[], 2.0)[0];
         assert!(a.x > 160.0, "should sit outside the mark, on the side away from the host's centre");
         assert_eq!(a.size, 10.0, "size defaults to the mark rectangle's height");
     }
@@ -365,7 +414,7 @@ mod tests {
         let mark = Rect::new(150.0, 100.0, 10.0, 12.0);
         let with_mark = Seed { box_rect: span, mark_rect: Some(mark), mode: AnchorMode::Edge, ..Default::default() };
         let without = Seed { box_rect: span, mark_rect: None, mode: AnchorMode::Edge, ..Default::default() };
-        let a = resolve_anchors(&[with_mark, without], &host, &mut Outlines::new());
+        let a = resolve_anchors(&[with_mark, without], &host, &mut Outlines::new(), &[], 2.0);
         assert!(a[0].x < a[1].x, "the composite's own span pushes the anchor further out");
     }
 
@@ -378,7 +427,7 @@ mod tests {
             size: Some(54.0),
             ..Default::default()
         };
-        let a = &resolve_anchors(&[seed], &host, &mut Outlines::new())[0];
+        let a = &resolve_anchors(&[seed], &host, &mut Outlines::new(), &[], 2.0)[0];
         assert_eq!((a.x, a.y), (20.0, 30.0));
         assert_eq!(a.size, 54.0, "an explicit size wins — a drop cap has no box of its own");
         assert!(a.rail.is_none(), "neither overridden mode carries a silhouette");
@@ -397,7 +446,7 @@ mod tests {
             ink_box: Some(r),
             ..Default::default()
         };
-        let a = &resolve_anchors(&[seed], &host, &mut o)[0];
+        let a = &resolve_anchors(&[seed], &host, &mut o, &[], 2.0)[0];
         let rail = a.rail.as_ref().expect("the square has an outline to ride");
         assert_eq!(a.angle, rail.tangent, "growth sets off along the contour, not off it");
     }
