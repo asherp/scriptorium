@@ -1,0 +1,170 @@
+name: Preview
+
+# The playground is a static page and a wasm module, so a reviewer should not
+# have to take a branch, install a Rust toolchain and run a build to see what a
+# change to the growth actually looks like. Every pull request gets its own
+# built copy at
+#
+#     https://asherp.github.io/scriptorium/pr-<number>/
+#
+# and `main` publishes to the root. Both live on the `gh-pages` branch, which
+# this workflow owns entirely — nothing else should ever commit to it.
+#
+# ONE-TIME SETUP: Settings -> Pages -> Build and deployment -> Deploy from a
+# branch -> `gh-pages` / `(root)`. Until that is switched on the deploys still
+# run and the branch still fills up; the URLs just 404.
+#
+# A pull request from a FORK gets a read-only token and cannot publish. That is
+# GitHub's rule and not something to work around: a preview build runs this
+# repository's own workflow against a stranger's code, and letting it write to
+# the site would hand that stranger the site.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+# One writer at a time. Two pull requests pushing to `gh-pages` at the same
+# moment would otherwise race, and the loser's preview would simply vanish.
+concurrency:
+  group: gh-pages
+  cancel-in-progress: false
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Where this build goes
+        id: target
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "dir=pr-${{ github.event.number }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "dir=." >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: dtolnay/rust-toolchain@stable
+        if: github.event.action != 'closed'
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        if: github.event.action != 'closed'
+
+      - name: Install wasm-pack
+        if: github.event.action != 'closed'
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      # The same script a contributor runs locally, so a preview cannot be
+      # built differently from the thing it is previewing.
+      - name: Build the playground
+        if: github.event.action != 'closed'
+        run: web/build.sh
+
+      - name: Publish
+        if: >-
+          github.event_name != 'pull_request'
+          || github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          set -euo pipefail
+          dir="${{ steps.target.outputs.dir }}"
+          closed="${{ github.event.action == 'closed' }}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # A worktree rather than a checkout: the build output is sitting in
+          # this one and must survive the branch switch.
+          git fetch origin gh-pages --depth=1 || true
+          if git rev-parse --verify origin/gh-pages >/dev/null 2>&1; then
+            git worktree add ../site origin/gh-pages
+            git -C ../site switch -c gh-pages --track origin/gh-pages 2>/dev/null \
+              || git -C ../site switch gh-pages
+          else
+            git worktree add --detach ../site
+            git -C ../site checkout --orphan gh-pages
+            git -C ../site rm -rf . >/dev/null 2>&1 || true
+            # Pages runs Jekyll over the branch unless told not to, and Jekyll
+            # drops files and directories whose names begin with an underscore.
+            touch ../site/.nojekyll
+          fi
+
+          if [ "$closed" = "true" ]; then
+            rm -rf "../site/${dir:?}"
+            message="preview: drop ${dir} (pull request closed)"
+          else
+            if [ "$dir" = "." ]; then
+              # Root deploy: everything except the per-pull-request previews.
+              find ../site -mindepth 1 -maxdepth 1 \
+                ! -name .git ! -name .nojekyll ! -name 'pr-*' -exec rm -rf {} +
+              cp -r web/. ../site/
+            else
+              rm -rf "../site/${dir:?}"
+              mkdir -p "../site/${dir}"
+              cp -r web/. "../site/${dir}/"
+            fi
+            touch ../site/.nojekyll
+            message="preview: ${dir} at ${GITHUB_SHA::7}"
+          fi
+
+          git -C ../site add --all --force
+          if git -C ../site diff --cached --quiet; then
+            echo "nothing changed"
+            exit 0
+          fi
+          git -C ../site commit -m "$message"
+
+          # The concurrency group serializes writers, but a run that was queued
+          # behind another still has a stale base. Rebase and retry rather than
+          # failing a review over a race.
+          for attempt in 1 2 3; do
+            if git -C ../site push origin gh-pages; then exit 0; fi
+            sleep $((attempt * 3))
+            git -C ../site pull --rebase origin gh-pages
+          done
+          exit 1
+
+      - name: Say where it is
+        if: >-
+          github.event_name == 'pull_request'
+          && github.event.action != 'closed'
+          && github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const url = `https://${context.repo.owner}.github.io/${context.repo.repo}/pr-${context.issue.number}/`;
+            const marker = '<!-- preview-url -->';
+            const body = [
+              marker,
+              `**Playground preview:** ${url}`,
+              '',
+              `Built from ${context.sha.slice(0, 7)}. Updated on every push; removed when this pull request closes.`,
+              '',
+              '---',
+              '_Generated by [Claude Code](https://claude.ai/code)_',
+            ].join('\n');
+
+            // One comment, edited — a preview that announced itself again on
+            // every push would bury the review it is meant to serve.
+            const { data: comments } = await github.rest.issues.listComments({
+              ...context.repo,
+              issue_number: context.issue.number,
+              per_page: 100,
+            });
+            const mine = comments.find((c) => c.body.includes(marker));
+            if (mine) {
+              await github.rest.issues.updateComment({ ...context.repo, comment_id: mine.id, body });
+            } else {
+              await github.rest.issues.createComment({
+                ...context.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }

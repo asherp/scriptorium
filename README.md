@@ -128,6 +128,10 @@ every knob in [`Params`] wired to it.
 web/build.sh --serve      # builds web/pkg, then serves http://localhost:8080
 ```
 
+You need not build it to look at it: every pull request publishes its own copy
+to `https://asherp.github.io/scriptorium/pr-<number>/`, and `main` publishes to
+the root, so a change to how growth behaves can be reviewed by looking at it.
+
 It is worth having as more than a demo, because it makes the split above
 visible. The panel labels each knob **grammar** or **turtle** and clears the
 derivation cache only for the first kind; drag the column narrower or scale the
