@@ -101,6 +101,31 @@ returning plain JSON-shaped objects with camelCase keys, so a host page's
 measuring layer can hand over rectangles and get path data back without
 mirroring any of the logic in JavaScript.
 
+## The playground
+
+`web/` is a reference host: a page of prose with an illuminated initial, and
+every knob in [`Params`] wired to it.
+
+```sh
+web/build.sh --serve      # builds web/pkg, then serves http://localhost:8080
+```
+
+It is worth having as more than a demo, because it makes the split above
+visible. The panel labels each knob **grammar** or **turtle** and clears the
+derivation cache only for the first kind; drag the column narrower or scale the
+type and the readout's symbol string does not move, while the vine relaxes into
+its new measure. Click any word to grow a vine off it. The debug overlays draw
+the padded obstacle field, the bounds, the leashes, and the contour the vine is
+riding.
+
+Everything DOM-shaped lives in the host, as the contract requires. `web/` lays
+the prose out one span per term and measures those boxes back, works out where
+a mark's ink actually sits inside its line box from canvas font metrics, and —
+since a browser will not hand over a font's contours — gets its glyph outlines
+by rasterizing the character and tracing the boundary between ink and paper.
+The engine is handed rectangles and a unit-square path, exactly as a PDF
+renderer or a plotter would hand it the same.
+
 ## License
 
 MIT OR Apache-2.0, at your option.
