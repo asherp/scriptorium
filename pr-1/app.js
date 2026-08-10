@@ -464,6 +464,10 @@ function report(out, request, details, ms) {
     ['symbol', `${symbol.length} chars, ${count(symbol, 'F')} F, ${count(symbol, '[')} branches`],
     ['marks', `${out.anchors.length}, ${bordered} riding a border`],
     ['blocks', `${out.hulls.length}, ${glyphs} glyphs, ${out.hulls.map((h) => h.length).join('/') || '—'} corners`],
+    // Measured, not asked for: on a narrow screen the page is capped by the
+    // viewport whatever the column knob says, and the engine only ever sees
+    // what was actually laid out.
+    ['column', `${Math.round(request.host.w)} × ${Math.round(request.host.h)} px`],
     ['drawn', `${segments} segments, ${leaves} leaves`],
     ['obstacles', String(out.obstacles.length)],
     ['geometry scale', out.geometryScale.toFixed(3)],
