@@ -311,22 +311,28 @@ main {
 
 .stage-wrap {
   flex: 1;
+  min-width: 0;
   overflow: auto;
   display: flex;
   justify-content: center;
   align-items: flex-start;
-  padding: 32px;
+  padding: clamp(10px, 3vw, 32px);
 }
 
+/* The page never exceeds the viewport, whatever the column-width knob asks
+   for. A manuscript page that ran off the side of the screen would be a page
+   with no margin to grow into, which is the one thing this engine needs. */
 .page {
   position: relative;
+  max-width: 100%;
   background: var(--paper);
   box-shadow: var(--shadow);
-  padding: 56px;
+  padding: clamp(18px, 5vw, 56px);
   border-radius: 2px;
 }
 
 .column {
+  max-width: 100%;
   /* The symbol faces are in the stack on purpose: a notation of 110 marks
      reaches well outside what a text serif covers, and a mark the browser has
      no glyph for is a mark this page cannot measure, trace or grow from. */
@@ -415,9 +421,57 @@ main {
 }
 .boot p { max-width: 46ch; text-align: center; line-height: 1.6; }
 
-@media (max-width: 900px) {
+/* A narrow LANDSCAPE screen has width to spare and no height at all: stacking
+   there would leave the page a couple of lines tall, so the panel stays beside
+   it and merely gets thinner. */
+@media (max-width: 900px) and (orientation: landscape) {
+  .panel { width: min(40vw, 300px); }
+}
+
+/* Portrait: the page is what the reader came for, so it goes first and the
+   panel scrolls underneath it rather than pushing it off the screen. */
+@media (max-width: 900px) and (orientation: portrait) {
   main { flex-direction: column; }
-  .panel { width: 100%; border-right: none; border-bottom: 1px solid var(--edge); max-height: 45vh; }
-  .stage-wrap { padding: 16px; }
-  .page { padding: 32px; }
+  .stage-wrap {
+    order: -1;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  .panel {
+    order: 0;
+    width: 100%;
+    flex: 0 0 auto;
+    max-height: 42vh;
+    border-right: none;
+    border-top: 1px solid var(--edge);
+    padding-bottom: 24px;
+  }
+}
+
+/* Phone-shaped: the bar is four rows of controls on a 390px screen unless the
+   pieces are allowed to give, and every row it costs comes off the page. */
+@media (max-width: 640px) {
+  .bar {
+    gap: 5px 8px;
+    padding: 5px 8px;
+    font-size: 12px;
+  }
+  .bar h1 { font-size: 14px; }
+  .bar button { padding: 2px 7px; }
+  .field { flex: 1 1 auto; gap: 4px; }
+  .field label { font-size: 10px; }
+  #seed {
+    flex: 1 1 10ch;
+    width: auto;
+    min-width: 8ch;
+  }
+  .spacer { display: none; }
+  .knob { grid-template-columns: 11ch 1fr 6ch; }
+  .ops { margin-left: 0; }
+}
+
+/* Not much height to go round — a short phone in portrait, or any phone in
+   landscape. The panel yields first; it is the page that has to stay legible. */
+@media (max-height: 620px) {
+  .panel { max-height: 34vh; }
 }
