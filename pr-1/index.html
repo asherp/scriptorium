@@ -1,0 +1,139 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: MIT OR Apache-2.0 -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>scriptorium — L-system playground</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="bar">
+  <h1>scriptorium</h1>
+  <div class="field">
+    <label for="seed">seed</label>
+    <input id="seed" type="text" spellcheck="false" autocomplete="off">
+    <button id="reroll" title="A fresh 64-hex source">reroll</button>
+  </div>
+  <div class="field">
+    <label for="confirmations">depth</label>
+    <input id="confirmations" type="number" min="0" step="1" class="num short">
+    <span id="stage-chip" class="chip"></span>
+  </div>
+  <div class="field stage-jump" id="stage-jump"></div>
+  <div class="spacer"></div>
+  <button id="replay" title="Redraw the vines stroke by stroke">replay</button>
+  <button id="download">SVG</button>
+  <button id="copy-request" title="The exact GrowthRequest this page just sent">copy request</button>
+</header>
+
+<main>
+  <aside class="panel" id="panel">
+    <details class="group" open>
+      <summary>Page</summary>
+      <p class="note">
+        The host measures; the engine decides. Everything below is laid out and
+        measured here, then handed over as plain rectangles.
+      </p>
+      <div class="knob">
+        <label><span>body size (px)</span></label>
+        <input id="font-size" type="range" min="10" max="40" step="1">
+        <input id="font-size-num" type="number" min="10" max="40" step="1" class="num">
+      </div>
+      <div class="knob">
+        <label><span>column width</span></label>
+        <input id="column-width" type="range" min="220" max="900" step="10">
+        <input id="column-width-num" type="number" min="220" max="900" step="10" class="num">
+      </div>
+      <div class="knob">
+        <label><span>drop cap (em)</span></label>
+        <input id="dropcap-size" type="range" min="1" max="8" step="0.1">
+        <input id="dropcap-size-num" type="number" min="1" max="8" step="0.1" class="num">
+      </div>
+      <div class="knob">
+        <label><span>anchor mode</span></label>
+        <select id="anchor-mode" class="wide-input">
+          <option value="edge">edge — just past the boundary, riding the outline</option>
+          <option value="center">center — the mark's centroid</option>
+          <option value="top-left">top-left — the containing box's corner</option>
+        </select>
+      </div>
+      <label class="check"><input type="checkbox" id="use-page" checked> bound growth by the page</label>
+      <label class="check"><input type="checkbox" id="ride-glyph" checked> trace glyph outlines from the font</label>
+      <label class="check"><input type="checkbox" id="ride-block" checked> run the block's silhouette</label>
+      <label class="check"><input type="checkbox" id="dropcap-mark" checked> the drop cap is a mark too</label>
+      <textarea id="text" rows="7" spellcheck="false"></textarea>
+      <p class="note">
+        A blank line starts a new block. Click any word to make it a mark, or
+        unmake one.
+      </p>
+    </details>
+
+    <details class="group" open>
+      <summary>Notation</summary>
+      <p class="note">
+        The marks this page grows from — one per opcode, all 110 of them. A
+        term opening with an enabled mark is a seed; growth runs its block's
+        silhouette counter-clockwise from the point that silhouette touches it.
+      </p>
+      <div id="notation"></div>
+      <p class="note">on the page: <span id="marks-readout" class="marks"></span></p>
+    </details>
+
+    <div id="params"></div>
+
+    <details class="group" open>
+      <summary>Productions <span class="kind kind-grammar">grammar</span></summary>
+      <p class="note">
+        <code>F</code> grow and draw · <code>L</code> leaf · <code>+ -</code> turn ·
+        <code>[ ]</code> branch. A rule with no <code>F</code> can only ever make
+        the vine sparser than the generation before it.
+      </p>
+      <div id="productions"></div>
+    </details>
+
+    <details class="group">
+      <summary>Stage ladder <span class="kind kind-grammar">grammar</span></summary>
+      <p class="note">Which depth counts read as which stage, and what each is worth in rewritings.</p>
+      <div id="stages"></div>
+    </details>
+
+    <details class="group" open>
+      <summary>Show</summary>
+      <label class="check"><input type="checkbox" id="show-leaves" checked> leaves</label>
+      <label class="check"><input type="checkbox" id="show-hulls" checked> block silhouettes</label>
+      <label class="check"><input type="checkbox" id="show-obstacles"> obstacle field (padded)</label>
+      <label class="check"><input type="checkbox" id="show-bounds"> bounds</label>
+      <label class="check"><input type="checkbox" id="show-anchors"> anchors</label>
+      <label class="check"><input type="checkbox" id="show-outline"> traced glyph outlines</label>
+      <div class="knob">
+        <label><span>stroke (px)</span></label>
+        <input id="stroke" type="range" min="0.3" max="4" step="0.1">
+        <input id="stroke-num" type="number" min="0.3" max="4" step="0.1" class="num">
+      </div>
+      <button id="reset-params" class="wide">reset every knob</button>
+    </details>
+
+    <details class="group" open>
+      <summary>Derivation</summary>
+      <dl class="readout" id="readout"></dl>
+      <pre id="symbol" class="symbol"></pre>
+    </details>
+  </aside>
+
+  <section class="stage-wrap">
+    <div class="page" id="page">
+      <div class="column" id="column"></div>
+      <svg class="growth" id="growth" aria-hidden="true"></svg>
+    </div>
+  </section>
+</main>
+
+<div id="boot" class="boot">
+  <p>Loading the engine…</p>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
