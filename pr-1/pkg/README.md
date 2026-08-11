@@ -38,9 +38,11 @@ In the order it binds:
   just drawn. Counters are holes, not edges, and are never ridden.
 - **The block**, for a mark that names one: the convex hull of a paragraph's
   own LETTERS — their outlines, not the boxes they sit in — is the silhouette
-  it presents to the page, and growth rides it counter-clockwise from wherever
-  the hull comes nearest the mark, which for a mark opening its line is the
-  point the hull is touching. This is the border a scribe rules around a
+  it presents to the page, and growth rides it counter-clockwise, beginning at
+  the mark's own clockwise-most extent so that the first thing it does is wrap
+  the stretch of ring that mark is exposed along. Start anywhere else and the
+  ride sets off from part-way across the letter it grew from, leaving the rest
+  of that letter behind it for good. This is the border a scribe rules around a
   paragraph rather than the flourish that leaves an initial. The ragged end of
   a short last line is inside that silhouette, not traced by it, and the ring
   is ruled clear of the writing so that a vine riding it is not blocked by the
@@ -156,11 +158,19 @@ boundary between ink and paper. The engine is handed rectangles and
 unit-square paths, exactly as a PDF renderer or a plotter would hand it the
 same.
 
-Two knobs are worth knowing about when growing borders rather than flourishes.
-**follow steps** caps how far a vine rides its rail, and a letterform's couple
-of dozen steps is nothing like a paragraph's two hundred. **border margin** is
-how far outside the text the silhouette is ruled, and it has to clear a line's
-leading, not just its ink, wherever the obstacle field is per term.
+Two things are worth knowing when growing borders rather than flourishes.
+
+How far a vine runs its border is a **grammar** question, not a turtle one. A
+branch springs off the rail rather than along it, so the ride is exactly as
+long as the run of `F`s outside any `[` — the readout reports that count, and
+it predicts the ride to the step. Everything else in the symbol is growth that
+leaves the ring. **follow steps** is only a cap on top of that and does not
+bind until the trunk outgrows it; to run more of a block, give
+[`Params::productions`] more trunk rather than raising the cap.
+
+**border margin** is how far outside the text the silhouette is ruled, and it
+has to clear a line's leading, not just its ink, wherever the obstacle field is
+per term.
 
 ## License
 

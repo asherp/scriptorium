@@ -490,6 +490,11 @@ function report(out, request, details, ms) {
         (boost ? ` (${stage?.iterations ?? 0} + ${boost} boost)` : ''),
     ],
     ['symbol', `${symbol.length} chars, ${count(symbol, 'F')} F, ${count(symbol, '[')} branches`],
+    // The ride's length, and not an approximation of it: a branch springs OFF
+    // the rail, so a vine follows its rail for exactly as many steps as the
+    // symbol has F outside any bracket. Raising `follow steps` does nothing
+    // until this outgrows it.
+    ['trunk', `${trunkOf(symbol)} F outside a branch = rail steps`],
     ['marks', `${out.anchors.length}, ${bordered} riding a border`],
     ['blocks', `${out.hulls.length}, ${glyphs} glyphs, ${out.hulls.map((h) => h.length).join('/') || '—'} corners`],
     // Measured, not asked for: on a narrow screen the page is capped by the
@@ -514,6 +519,18 @@ function report(out, request, details, ms) {
   const shown =
     symbol.length > 6000 ? `${symbol.slice(0, 6000)}\n… ${symbol.length - 6000} more` : symbol;
   $('symbol').textContent = shown || '(nothing — a bare stage grows nothing at all)';
+}
+
+/** The symbol's trunk: its `F`s outside any branch. */
+function trunkOf(symbol) {
+  let depth = 0;
+  let trunk = 0;
+  for (const c of symbol) {
+    if (c === '[') depth++;
+    else if (c === ']') depth--;
+    else if (c === 'F' && depth === 0) trunk++;
+  }
+  return trunk;
 }
 
 function count(s, ch) {
