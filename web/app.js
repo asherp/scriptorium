@@ -29,6 +29,7 @@ const state = {
   fontSize: 17,
   columnWidth: 520,
   dropCapEm: 3.4,
+  siglaEm: 1,
   anchorMode: 'edge',
   usePage: true,
   rideGlyph: true,
@@ -117,6 +118,7 @@ function wire() {
   pairSlider('font-size', 'fontSize', applyPageStyle);
   pairSlider('column-width', 'columnWidth', applyPageStyle);
   pairSlider('dropcap-size', 'dropCapEm', applyPageStyle);
+  pairSlider('sigla-size', 'siglaEm', applyPageStyle);
   pairSlider('stroke', 'strokeWidth');
 
   $('anchor-mode').value = state.anchorMode;
@@ -249,6 +251,12 @@ function applyPageStyle() {
   const column = $('column');
   column.style.width = `${state.columnWidth}px`;
   column.style.fontSize = `${state.fontSize}px`;
+  // The sigla answer to their own scale, not to the body's. A notation is set
+  // at the size its marks need to be legible at, which is rarely the size of
+  // the prose around it — and a mark's rendered size is also what earns it
+  // extra generations, so this is a growth control as much as a typographic
+  // one.
+  column.style.setProperty('--sigla', String(state.siglaEm));
   const cap = column.querySelector('.is-dropcap');
   if (cap) cap.style.fontSize = `${state.dropCapEm}em`;
 }
@@ -269,15 +277,17 @@ function schedule() {
 }
 
 function grow() {
-  const layout = measure($('page'), $('column'), state.termEls);
-
-  // Which terms are marks: the notation decides, a click overrides.
+  // Which terms are marks: the notation decides, a click overrides. This has
+  // to happen BEFORE the page is measured — a mark carries its own size, so
+  // marking one changes the box it will be measured at.
   const marks = ALL_MARKS.filter((m) => !state.disabledOps.has(m.name));
-  const marked = markedTerms(layout, marks, {
+  const marked = markedTerms(state.termEls, marks, {
     dropCap: state.dropCapIsMark,
     manual: state.manual,
   });
   for (const el of state.termEls) el.classList.toggle('marked', marked.has(el.dataset.index));
+
+  const layout = measure($('page'), $('column'), state.termEls);
 
   // The blocks, as characters and where each one puts ink — which is what the
   // silhouette is a hull of. The outlines come with them: without the letters'
@@ -320,6 +330,12 @@ function grow() {
     return;
   }
   const ms = performance.now() - t0;
+
+  // The last exchange, for a console. Everything the engine was told and
+  // everything it answered, in the coordinate space the page is drawn in —
+  // which is the difference between guessing why a vine went somewhere and
+  // reading off where it was allowed to go.
+  window.scriptorium = { request, response: out, blocks, outlines, layout };
 
   draw(out, layout, blocks, outlines);
   report(out, request, details, ms);

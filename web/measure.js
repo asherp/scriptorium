@@ -192,12 +192,17 @@ export function blocksFrom(layout, { rideGlyph = true } = {}) {
  * The notation decides: a term opening with one of the enabled opcode marks is
  * a mark, and so is the drop cap, an initial being a mark by definition. A
  * click on any term overrides that either way, which is what the page is for.
+ *
+ * Answered from the ELEMENTS rather than from a layout, and that ordering is
+ * load-bearing: a mark can be set at its own size, so what counts as one has
+ * to be settled before anything is measured. Measure first and every box would
+ * be a box from before the sigla were sized.
  */
-export function markedTerms(layout, marks, { dropCap = true, manual = new Map() } = {}) {
+export function markedTerms(termEls, marks, { dropCap = true, manual = new Map() } = {}) {
   const out = new Set();
-  for (const term of layout.terms) {
-    const key = term.el.dataset.index;
-    const auto = (dropCap && term.el.classList.contains('is-dropcap')) || !!opcodeAt(term.text, marks);
+  for (const el of termEls) {
+    const key = el.dataset.index;
+    const auto = (dropCap && el.classList.contains('is-dropcap')) || !!opcodeAt(el.textContent, marks);
     if (manual.has(key) ? manual.get(key) : auto) out.add(key);
   }
   return out;
