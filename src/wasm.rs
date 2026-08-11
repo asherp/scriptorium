@@ -17,7 +17,7 @@ use wasm_bindgen::prelude::*;
 
 use crate::{
     default_growth_stages, growth_stage as bucket, mark_lead_length as lead_length, outer_contours,
-    size_boost as boost_for, GrowthRequest, GrowthStage, Scriptorium, Params, Point,
+    size_boost as boost_for, Glyph, GrowthRequest, GrowthStage, Scriptorium, Params, Point,
 };
 
 thread_local! {
@@ -136,6 +136,20 @@ pub fn mark_lead_length(text: &str, override_len: Option<f64>) -> usize {
 #[wasm_bindgen(js_name = leadingSpaceLength)]
 pub fn leading_space_length(text: &str) -> usize {
     crate::leading_space_len(text)
+}
+
+/// One block's convex hull, at whatever margin the caller asks for.
+///
+/// `illuminate` already reports the ring growth actually rode, which is the
+/// hull grown clear of the text's own halo. This is for a host that wants the
+/// UNGROWN hull as well — at `pad` 0 its vertices are points on the letters
+/// themselves, which is the only way to see that the silhouette really is the
+/// writing's own shape and not a box around it.
+#[wasm_bindgen(js_name = blockHull)]
+pub fn block_hull_js(glyphs: JsValue, pad: f64) -> Result<JsValue, JsValue> {
+    let glyphs: Vec<Glyph> = from_js(glyphs, "glyphs")?;
+    let hull = ENGINE.with(|e| crate::block_hull(&glyphs, &mut e.borrow_mut().outlines, pad));
+    to_js(&hull)
 }
 
 /// Drops every contour some larger contour contains — exposed so a host can

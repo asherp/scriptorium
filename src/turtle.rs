@@ -173,6 +173,36 @@ pub fn interpret_from(
         dx * dx + dy * dy <= max_reach * max_reach
     };
 
+    // The ride begins ON the rail, at the point the rail was aimed at — for a
+    // block, the clockwise end of the mark's own stretch of the ring. A walk
+    // that set off from the anchor would land its first step a whole step PAST
+    // that point and never trace the stretch it was aimed at, which for a mark
+    // no wider than a step or two is the whole of it.
+    //
+    // Getting there is placement rather than growth, so it costs the symbol
+    // nothing: a vine with two `F` to its name spends both of them riding.
+    // It obeys the same obstacles as any step, and where it cannot be made the
+    // walk simply starts where it stood.
+    if let Some(rail) = rail {
+        let s = rail.pts[rail.start_idx];
+        let obs = active(&state.home);
+        if (s.x - state.x).hypot(s.y - state.y) > 1e-9
+            && within_reach(s.x, s.y)
+            && !out_of_bounds(s.x, s.y, bounds)
+            && first_blocking(state.x, state.y, s.x, s.y, &obs).is_none()
+        {
+            state.angle = (s.y - state.y).atan2(s.x - state.x);
+            state.x = s.x;
+            state.y = s.y;
+            cur.points.push(s);
+            for (i, r) in obstacles.iter().enumerate() {
+                if !state.home.contains(&i) && r.contains(s.x, s.y) {
+                    state.home.insert(i);
+                }
+            }
+        }
+    }
+
     for ch in symbol.chars() {
         match ch {
             'F' => {
