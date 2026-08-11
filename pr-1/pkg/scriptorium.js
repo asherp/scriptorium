@@ -1,6 +1,26 @@
 /* @ts-self-types="./scriptorium.d.ts" */
 
 /**
+ * One block's convex hull, at whatever margin the caller asks for.
+ *
+ * `illuminate` already reports the ring growth actually rode, which is the
+ * hull grown clear of the text's own halo. This is for a host that wants the
+ * UNGROWN hull as well — at `pad` 0 its vertices are points on the letters
+ * themselves, which is the only way to see that the silhouette really is the
+ * writing's own shape and not a box around it.
+ * @param {any} glyphs
+ * @param {number} pad
+ * @returns {any}
+ */
+export function blockHull(glyphs, pad) {
+    const ret = wasm.blockHull(glyphs, pad);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
  * The default stage ladder.
  * @returns {any}
  */

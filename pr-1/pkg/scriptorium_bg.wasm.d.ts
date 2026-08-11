@@ -1,6 +1,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export const memory: WebAssembly.Memory;
+export const blockHull: (a: any, b: number) => [number, number, number];
 export const defaultGrowthStages: () => [number, number, number];
 export const defaultParams: () => [number, number, number];
 export const generateSymbol: (a: number, b: number, c: number, d: number, e: any, f: any) => [number, number, number, number];

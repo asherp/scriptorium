@@ -2,6 +2,17 @@
 /* eslint-disable */
 
 /**
+ * One block's convex hull, at whatever margin the caller asks for.
+ *
+ * `illuminate` already reports the ring growth actually rode, which is the
+ * hull grown clear of the text's own halo. This is for a host that wants the
+ * UNGROWN hull as well — at `pad` 0 its vertices are points on the letters
+ * themselves, which is the only way to see that the silhouette really is the
+ * writing's own shape and not a box around it.
+ */
+export function blockHull(glyphs: any, pad: number): any;
+
+/**
  * The default stage ladder.
  */
 export function defaultGrowthStages(): any;
@@ -79,6 +90,7 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
+    readonly blockHull: (a: any, b: number) => [number, number, number];
     readonly defaultGrowthStages: () => [number, number, number];
     readonly defaultParams: () => [number, number, number];
     readonly generateSymbol: (a: number, b: number, c: number, d: number, e: any, f: any) => [number, number, number, number];
