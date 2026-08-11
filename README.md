@@ -156,11 +156,19 @@ boundary between ink and paper. The engine is handed rectangles and
 unit-square paths, exactly as a PDF renderer or a plotter would hand it the
 same.
 
-Two knobs are worth knowing about when growing borders rather than flourishes.
-**follow steps** caps how far a vine rides its rail, and a letterform's couple
-of dozen steps is nothing like a paragraph's two hundred. **border margin** is
-how far outside the text the silhouette is ruled, and it has to clear a line's
-leading, not just its ink, wherever the obstacle field is per term.
+Two things are worth knowing when growing borders rather than flourishes.
+
+How far a vine runs its border is a **grammar** question, not a turtle one. A
+branch springs off the rail rather than along it, so the ride is exactly as
+long as the run of `F`s outside any `[` — the readout reports that count, and
+it predicts the ride to the step. Everything else in the symbol is growth that
+leaves the ring. **follow steps** is only a cap on top of that and does not
+bind until the trunk outgrows it; to run more of a block, give
+[`Params::productions`] more trunk rather than raising the cap.
+
+**border margin** is how far outside the text the silhouette is ruled, and it
+has to clear a line's leading, not just its ink, wherever the obstacle field is
+per term.
 
 ## License
 

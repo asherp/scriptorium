@@ -46,9 +46,9 @@ export const PARAM_GROUPS = [
   {
     title: 'Riding a rail',
     kind: 'turtle',
-    note: 'How a vine runs the line it grew from — a letterform, or a block\'s silhouette — and how it leaves it. A letter is a couple of dozen steps around; a paragraph is nearer two hundred.',
+    note: 'How a vine runs the line it grew from — a letterform, or a block\'s silhouette — and how it leaves it. The ride\'s LENGTH is a grammar question: see the trunk count in the readout.',
     knobs: [
-      ['glyphFollowMax', 'follow steps', 0, 600, 1, 'How long the opening run may trace its rail. Raise it to run a whole block.'],
+      ['glyphFollowMax', 'follow steps', 0, 600, 1, 'A cap on the opening run, not its length. It does nothing until the grammar\'s trunk outgrows it — to run more of a block, give the productions more trunk.'],
       ['glyphClearanceMul', 'clearance × step', 0, 3, 0.05, 'How near its own trail counts as crossing itself.'],
       ['glyphDepartDeg', 'depart (°)', 0, 180, 1, 'How sharply the vine turns away when it leaves.'],
       ['departForkSteps', 'depart fork steps', 0, 20, 1, 'Length of the shoot left behind at the departure. 0 disables it.'],

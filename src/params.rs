@@ -90,14 +90,20 @@ pub struct Params {
     pub hull_margin: f64,
 
     // ── riding a rail: a glyph's outline, or a block's silhouette ─────────
-    /// How many steps the opening run may spend tracing its rail — a closed
-    /// ring would otherwise carry it all the way round and back onto its own
-    /// trail.
+    /// A CAP on how many steps the opening run may spend tracing its rail — a
+    /// closed ring would otherwise carry it all the way round and back onto
+    /// its own trail.
     ///
-    /// A letterform is a couple of dozen steps around. A paragraph's
-    /// silhouette is nearer two hundred, so a host that grows vines along
-    /// blocks rather than letters wants this considerably higher than the
-    /// default a glyph asks for.
+    /// A cap and not a length. How far a vine actually rides is decided by the
+    /// GRAMMAR: a branch springs off the rail rather than along it, so the
+    /// ride is exactly as long as the run of `F`s outside any `[`, and every
+    /// `F` inside a bracket is growth that leaves. Raising this does nothing
+    /// at all until that trunk is longer than it — which, with the default
+    /// productions, it is not until well past the deepest stage.
+    ///
+    /// So a host that wants a vine to run a whole paragraph reaches for
+    /// [`Params::productions`], not for this: a rule that keeps two `F`s in
+    /// the trunk lays down twice the border of one that keeps one.
     pub glyph_follow_max: u32,
     /// How near (in step-lengths) its own earlier trail has to come before
     /// the ride counts as about to cross itself.
