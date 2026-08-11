@@ -196,28 +196,69 @@ fn densify(ring: &[Point], spacing: f64) -> Vec<Point> {
     out
 }
 
+/// The signed angle from `from` to `to`, wrapped into (-π, π].
+fn wrapped(to: f64, from: f64) -> f64 {
+    let mut d = to - from;
+    while d > std::f64::consts::PI {
+        d -= std::f64::consts::TAU;
+    }
+    while d <= -std::f64::consts::PI {
+        d += std::f64::consts::TAU;
+    }
+    d
+}
+
 /// The rail a vine rides around a block, or `None` where there is no ring to
 /// ride.
 ///
-/// Growth starts where the hull comes nearest the mark — which for a mark that
-/// sits on the block's own edge, as an opcode at the head of its line does, is
-/// the point of the hull the mark is touching — and travels the ring in the
-/// direction it was wound. The direction is NOT re-derived here the way
-/// [`crate::rail_for`] derives it for a letter: a letterform is a shape with
-/// an inside and an outside and no natural sense of travel, whereas a block's
-/// silhouette was wound counter-clockwise on purpose, and that decision is the
-/// host's to keep.
-pub fn rail_along(hull: &[Point], spacing: f64, x: f64, y: f64) -> Option<Rail> {
+/// Growth begins at the mark's CLOCKWISE-MOST extent and travels the ring the
+/// way it was wound, which is counter-clockwise. That pairing is the whole
+/// point: start anywhere else on the mark and the ride sets off part-way
+/// across the very letter it grew from, leaving the rest of that letter's own
+/// stretch of ring behind it and never coming back. Starting at the clockwise
+/// end, the first thing the vine does is wrap the mark, and only then does it
+/// carry on round the block.
+///
+/// Clockwise-most is read as an angle about the ring's own centre, measured
+/// against the anchor so a mark sitting where the angle wraps is no special
+/// case. A convex ring wound counter-clockwise on a y-DOWN screen travels in
+/// the direction of DECREASING angle, so the corner to start from is the one
+/// with the greatest angle: everything else on the mark lies ahead of it.
+///
+/// The direction itself is not re-derived here the way [`crate::rail_for`]
+/// derives it for a letter: a letterform is a shape with an inside and an
+/// outside and no natural sense of travel, whereas a block's silhouette was
+/// wound counter-clockwise on purpose, and that decision is the host's to keep.
+pub fn rail_along(hull: &[Point], spacing: f64, mark: &Rect, x: f64, y: f64) -> Option<Rail> {
     let pts = densify(hull, spacing);
     let n = pts.len();
     if n < 3 {
         return None;
     }
 
+    let (mut cx, mut cy) = (0.0, 0.0);
+    for p in &pts {
+        cx += p.x;
+        cy += p.y;
+    }
+    let (cx, cy) = (cx / n as f64, cy / n as f64);
+
+    // The point on the mark to begin from, then the ring sample nearest it.
+    let base = (y - cy).atan2(x - cx);
+    let mut from = Point::new(x, y);
+    let mut most = f64::NEG_INFINITY;
+    for c in corners(mark) {
+        let rel = wrapped((c.y - cy).atan2(c.x - cx), base);
+        if rel > most {
+            most = rel;
+            from = c;
+        }
+    }
+
     let mut start_idx = 0;
     let mut best = f64::INFINITY;
     for (i, p) in pts.iter().enumerate() {
-        let d = (p.x - x).powi(2) + (p.y - y).powi(2);
+        let d = (p.x - from.x).powi(2) + (p.y - from.y).powi(2);
         if d < best {
             best = d;
             start_idx = i;
@@ -226,12 +267,7 @@ pub fn rail_along(hull: &[Point], spacing: f64, x: f64, y: f64) -> Option<Rail> 
 
     let at = |i: usize| pts[i % n];
     let tangent = (at(start_idx + 2).y - at(start_idx).y).atan2(at(start_idx + 2).x - at(start_idx).x);
-    let (mut cx, mut cy) = (0.0, 0.0);
-    for p in &pts {
-        cx += p.x;
-        cy += p.y;
-    }
-    Some(Rail { pts, start_idx, dir: 1, tangent, cx: cx / n as f64, cy: cy / n as f64 })
+    Some(Rail { pts, start_idx, dir: 1, tangent, cx, cy })
 }
 
 #[cfg(test)]
@@ -341,20 +377,39 @@ mod tests {
     }
 
     #[test]
-    fn a_ride_starts_where_the_hull_comes_nearest_the_mark() {
+    fn a_ride_starts_on_the_stretch_of_ring_its_own_mark_is_exposed_along() {
         let hull = block_hull(&unlettered(), &mut Outlines::new(), 4.0);
-        // A mark at the head of the last line, on the block's left edge.
-        let rail = rail_along(&hull, 2.0, -4.0, 47.0).expect("a hull is rideable");
+        // A mark opening the last line, against the block's left edge.
+        let mark = Rect::new(0.0, 40.0, 9.0, 14.0);
+        let rail = rail_along(&hull, 2.0, &mark, -4.0, 47.0).expect("a hull is rideable");
         let start = rail.pts[rail.start_idx];
         assert!((start.x - -4.0).abs() < 2.5, "the ride starts on the edge the mark touches");
-        assert!((start.y - 47.0).abs() < 2.5);
+        assert!((start.y - 40.0).abs() < 2.5, "and at the mark's clockwise end, its top");
         assert_eq!(rail.dir, 1, "the ring is ridden in the direction it was wound");
+    }
+
+    #[test]
+    fn a_ride_wraps_its_own_mark_before_carrying_on_round_the_block() {
+        let hull = block_hull(&unlettered(), &mut Outlines::new(), 4.0);
+        let mark = Rect::new(0.0, 40.0, 9.0, 14.0);
+        let rail = rail_along(&hull, 2.0, &mark, -4.0, 47.0).expect("a hull is rideable");
+        // Walking the ring forward from the start, the mark's whole vertical
+        // extent is covered before the ride leaves it — which is what starting
+        // at the clockwise end buys, and what starting at the nearest point
+        // (the mark's middle, y 47) would have thrown away.
+        let n = rail.pts.len();
+        let first_20: Vec<Point> = (0..20).map(|k| rail.pts[(rail.start_idx + k) % n]).collect();
+        let top = first_20.iter().map(|p| p.y).fold(f64::INFINITY, f64::min);
+        let bottom = first_20.iter().map(|p| p.y).fold(f64::NEG_INFINITY, f64::max);
+        assert!(top <= mark.y + 1.0, "the ride covers the mark's top");
+        assert!(bottom >= mark.bottom() - 1.0, "and goes on past its foot");
     }
 
     #[test]
     fn a_ride_down_the_left_edge_heads_down_the_page() {
         let hull = block_hull(&unlettered(), &mut Outlines::new(), 4.0);
-        let rail = rail_along(&hull, 2.0, -4.0, 20.0).expect("a hull is rideable");
+        let mark = Rect::new(0.0, 14.0, 9.0, 14.0);
+        let rail = rail_along(&hull, 2.0, &mark, -4.0, 20.0).expect("a hull is rideable");
         // Counter-clockwise, a mark part-way down the left edge sets off
         // toward the foot of the block.
         assert!(rail.tangent.sin() > 0.0, "y grows downward, so a downward heading has sin > 0");
@@ -362,9 +417,21 @@ mod tests {
     }
 
     #[test]
+    fn a_mark_where_the_angle_wraps_is_no_special_case() {
+        // A block to the RIGHT of its own mark puts the mark at the ±pi seam,
+        // where a naive angle comparison picks the wrong corner.
+        let hull = block_hull(&unlettered(), &mut Outlines::new(), 4.0);
+        let mark = Rect::new(0.0, 20.0, 9.0, 14.0);
+        let rail = rail_along(&hull, 2.0, &mark, -4.0, 27.0).expect("a hull is rideable");
+        let start = rail.pts[rail.start_idx];
+        assert!((start.y - 20.0).abs() < 2.5, "the seam does not move the start off the mark's top");
+    }
+
+    #[test]
     fn sampling_puts_a_step_within_reach_all_the_way_round() {
         let hull = block_hull(&unlettered(), &mut Outlines::new(), 4.0);
-        let rail = rail_along(&hull, 2.0, 0.0, 0.0).expect("a hull is rideable");
+        let rail = rail_along(&hull, 2.0, &Rect::new(0.0, 0.0, 4.0, 4.0), 0.0, 0.0)
+            .expect("a hull is rideable");
         for i in 0..rail.pts.len() {
             let (a, b) = (rail.pts[i], rail.pts[(i + 1) % rail.pts.len()]);
             assert!((b.x - a.x).hypot(b.y - a.y) <= 2.0 + 1e-9, "a gap the walk would jump");
@@ -375,7 +442,7 @@ mod tests {
     fn a_block_with_nothing_measurable_in_it_is_not_rideable() {
         let mut o = Outlines::new();
         assert!(block_hull(&[], &mut o, 4.0).is_empty());
-        assert!(rail_along(&[], 2.0, 0.0, 0.0).is_none());
+        assert!(rail_along(&[], 2.0, &Rect::new(0.0, 0.0, 4.0, 4.0), 0.0, 0.0).is_none());
         let degenerate = [
             Glyph { ch: None, box_rect: Rect::new(f64::NAN, 0.0, 10.0, 10.0) },
             Glyph { ch: None, box_rect: Rect::new(0.0, 0.0, f64::NAN, 10.0) },

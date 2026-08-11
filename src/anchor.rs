@@ -294,10 +294,14 @@ pub fn resolve_anchors(
                 // vine that has a border to run answers to the border, and
                 // only a mark with no block of its own is left to grow off its
                 // letterform.
+                // The mark's own ink where the host measured it: the ride
+                // starts at the clockwise end of THAT, not of the box it sits
+                // in, since it is the ink the silhouette was hulled from.
+                let sigla = seed.ink_box.unwrap_or(r);
                 let found = seed
                     .block
                     .and_then(|i| hulls.get(i))
-                    .and_then(|hull| rail_along(hull, rail_spacing, x, y))
+                    .and_then(|hull| rail_along(hull, rail_spacing, &sigla, x, y))
                     .or_else(|| match (seed.ch.as_deref(), seed.ink_box.as_ref()) {
                         (Some(ch), Some(ink)) if !ch.is_empty() => {
                             rail_for(outlines, first_char(ch), ink, x, y, angle)
