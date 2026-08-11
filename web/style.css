@@ -373,12 +373,22 @@ main {
 .blade { fill: currentColor; opacity: 0.85; }
 .vein { fill: none; stroke: var(--paper); opacity: 0.6; }
 
+/* The ring growth rides: dashed, standing off the text by the halo plus the
+   border margin. */
 .dbg-hull {
   fill: none;
   stroke: var(--debug-line);
   stroke-width: 0.8;
   stroke-dasharray: 3 3;
   opacity: 0.8;
+}
+
+/* The letters' own hull: solid, and its corners sit on the writing. */
+.dbg-hull-tight {
+  fill: none;
+  stroke: var(--debug-line);
+  stroke-width: 0.8;
+  opacity: 0.55;
 }
 .dbg-obstacle { fill: var(--debug-obstacle); stroke: none; }
 .dbg-bounds { fill: none; stroke: var(--debug-line); stroke-dasharray: 6 4; }

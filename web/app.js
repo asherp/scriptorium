@@ -347,10 +347,18 @@ function draw(out, layout, blocks, outlines) {
   }
   if (state.show.bounds) parts.push(rect(out.bounds, 'dbg-bounds'));
   if (state.show.hulls) {
+    // Two rings, and the gap between them is the point. The tight one is the
+    // letters' own convex hull, its vertices sitting ON the writing. The other
+    // is that hull grown clear of the text's halo, which is the one growth
+    // actually rides — a ring drawn on the letters would be blocked by them.
+    for (const glyphs of blocks) {
+      const tight = glyphs.length ? engine.blockHull(glyphs, 0) : [];
+      if (tight.length < 3) continue;
+      parts.push(`<path class="dbg-hull-tight" d="${ring(tight)}"/>`);
+    }
     for (const hull of out.hulls) {
       if (hull.length < 3) continue;
-      const d = hull.map((q, i) => `${i ? 'L' : 'M'}${r(q.x)},${r(q.y)}`).join(' ');
-      parts.push(`<path class="dbg-hull" d="${d} Z"/>`);
+      parts.push(`<path class="dbg-hull" d="${ring(hull)}"/>`);
     }
   }
   if (state.show.outline) {
@@ -397,6 +405,10 @@ function draw(out, layout, blocks, outlines) {
     // still sitting on the svg, and every static redraw would flicker.
     svg.classList.remove('replay');
   }
+}
+
+function ring(points) {
+  return `${points.map((q, i) => `${i ? 'L' : 'M'}${r(q.x)},${r(q.y)}`).join(' ')} Z`;
 }
 
 function rect(b, cls) {
