@@ -70,30 +70,73 @@ impl Glyph {
 pub fn block_hull(glyphs: &[Glyph], outlines: &mut Outlines, pad: f64) -> Vec<Point> {
     let mut pts = Vec::with_capacity(glyphs.len() * 12);
     for g in glyphs {
-        let b = g.box_rect;
-        // A host's measurement can arrive as NaN — a font that hasn't loaded,
-        // an element that isn't laid out. One such point would swallow the
-        // whole hull, so it is dropped rather than sorted.
-        if !(b.w >= 0.0) || !(b.h >= 0.0) || !b.x.is_finite() || !b.y.is_finite() {
-            continue;
-        }
-        let unit = g
-            .ch
-            .as_deref()
-            .filter(|c| !c.is_empty())
-            .and_then(|c| outlines.unit_hull(first_char(c)));
-        match unit {
-            Some(hull) => {
-                pts.extend(hull.iter().map(|p| Point::new(b.x + p.x * b.w, b.y + p.y * b.h)));
-            }
-            None => pts.extend(corners(&b)),
-        }
+        pts.extend(glyph_points(g, outlines));
     }
     // Hull first, THEN grow: growing a convex set commutes with hulling it
     // (a Minkowski sum does), so this is the same ring as growing every one of
     // the thousands of glyph points would give, for the price of growing a
     // handful.
-    grown(convex_hull(pts), pad)
+    grown(&convex_hull(pts), pad)
+}
+
+/// The points one rendered character contributes to its block's silhouette:
+/// its own outline mapped into the ink box the host measured, or that box's
+/// corners where the character has no outline registered.
+///
+/// A host's measurement can arrive as NaN — a font that hasn't loaded, an
+/// element that isn't laid out — and one such point would swallow a whole
+/// hull, so a degenerate glyph contributes nothing rather than being sorted.
+pub fn glyph_points(glyph: &Glyph, outlines: &mut Outlines) -> Vec<Point> {
+    let b = glyph.box_rect;
+    if !(b.w >= 0.0) || !(b.h >= 0.0) || !b.x.is_finite() || !b.y.is_finite() {
+        return Vec::new();
+    }
+    let unit = glyph
+        .ch
+        .as_deref()
+        .filter(|c| !c.is_empty())
+        .and_then(|c| outlines.unit_hull(first_char(c)));
+    match unit {
+        Some(hull) => hull.iter().map(|p| Point::new(b.x + p.x * b.w, b.y + p.y * b.h)).collect(),
+        None => corners(&b).to_vec(),
+    }
+}
+
+/// Whether a character is ON its block's silhouette — whether, that is, the
+/// block would present a different shape to the page without it.
+///
+/// This is what separates a mark that has a border to run from one that has
+/// none. A mark buried in the middle of a line contributes nothing to the
+/// hull: the nearest ring to it belongs to whichever letters DO reach the
+/// edge, and a vine starting there would be decorating its neighbours' outline
+/// while claiming to grow from this one.
+///
+/// Tested against the UNGROWN hull, and with the glyph's own points rather
+/// than its box: they are the very points the hull was built from, so a
+/// character that reaches the edge sits exactly on it.
+pub fn on_hull(hull: &[Point], glyph: &Glyph, outlines: &mut Outlines, tol: f64) -> bool {
+    if hull.len() < 3 {
+        return false;
+    }
+    glyph_points(glyph, outlines).iter().any(|p| distance_to_ring(hull, *p) <= tol)
+}
+
+/// How far a point lies from a closed ring's boundary.
+fn distance_to_ring(ring: &[Point], p: Point) -> f64 {
+    let n = ring.len();
+    (0..n)
+        .map(|i| {
+            let (a, b) = (ring[i], ring[(i + 1) % n]);
+            let (dx, dy) = (b.x - a.x, b.y - a.y);
+            let len2 = dx * dx + dy * dy;
+            let t = if len2 > 0.0 {
+                (((p.x - a.x) * dx + (p.y - a.y) * dy) / len2).clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
+            (p.x - (a.x + t * dx)).hypot(p.y - (a.y + t * dy))
+        })
+        .fold(f64::INFINITY, f64::min)
 }
 
 fn corners(r: &Rect) -> [Point; 4] {
@@ -107,12 +150,12 @@ fn corners(r: &Rect) -> [Point; 4] {
 
 /// The ring grown by `pad` on every side — every point replaced by the corners
 /// of the square it would sweep, and the result re-hulled.
-fn grown(ring: Vec<Point>, pad: f64) -> Vec<Point> {
+pub fn grown(ring: &[Point], pad: f64) -> Vec<Point> {
     if !(pad > 0.0) || ring.len() < 3 {
-        return ring;
+        return ring.to_vec();
     }
     let mut pts = Vec::with_capacity(ring.len() * 4);
-    for p in &ring {
+    for p in ring {
         pts.extend(corners(&Rect::new(p.x - pad, p.y - pad, pad * 2.0, pad * 2.0)));
     }
     convex_hull(pts)
@@ -374,6 +417,34 @@ mod tests {
                 assert!(!padded.contains(p.x, p.y), "the border {p:?} runs through {padded:?}");
             }
         }
+    }
+
+    #[test]
+    fn a_letter_the_silhouette_does_not_touch_is_not_on_it() {
+        let mut o = outlines_with("□", SQUARE);
+        let left = Glyph::new("□", Rect::new(0.0, 0.0, 10.0, 10.0));
+        let right = Glyph::new("□", Rect::new(100.0, 0.0, 10.0, 10.0));
+        // Smaller, and set in from every edge: it changes nothing about the
+        // shape the block presents, so nothing can grow along it.
+        let buried = Glyph::new("□", Rect::new(50.0, 3.0, 4.0, 4.0));
+        let hull = block_hull(&[left.clone(), right.clone(), buried.clone()], &mut o, 0.0);
+
+        assert!(on_hull(&hull, &left, &mut o, 0.5), "the letter that makes the left edge");
+        assert!(on_hull(&hull, &right, &mut o, 0.5), "and the one that makes the right");
+        assert!(!on_hull(&hull, &buried, &mut o, 0.5), "a letter inside the shape does not make it");
+    }
+
+    #[test]
+    fn a_letter_flush_along_an_edge_counts_without_being_a_corner_of_it() {
+        // Between two taller letters, at the same baseline: it contributes no
+        // vertex, but it does lie on the edge they span, and a vine along that
+        // edge really is running along this letter.
+        let mut o = outlines_with("□", SQUARE);
+        let a = Glyph::new("□", Rect::new(0.0, 0.0, 10.0, 20.0));
+        let flush = Glyph::new("□", Rect::new(20.0, 10.0, 10.0, 10.0));
+        let b = Glyph::new("□", Rect::new(40.0, 0.0, 10.0, 20.0));
+        let hull = block_hull(&[a, flush.clone(), b], &mut o, 0.0);
+        assert!(on_hull(&hull, &flush, &mut o, 0.5), "its foot is on the block's own foot");
     }
 
     #[test]

@@ -99,6 +99,15 @@ pub struct GrowthRequest {
     pub stages: Vec<GrowthStage>,
 }
 
+/// How near a block's silhouette a mark's own ink has to come to count as
+/// being ON it, in px at the reference body size.
+///
+/// The comparison is between a hull and the very points it was built from, so
+/// a character that reaches the edge lands exactly on it and any tolerance at
+/// all would do. Half a pixel is chosen to be describable rather than to be
+/// necessary: nearer than the page could show.
+const ON_SILHOUETTE: f64 = 0.5;
+
 /// One anchor's finished decoration.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -117,6 +126,11 @@ pub struct AnchorGrowth {
 pub struct GrowthResponse {
     /// One entry per seed, in the order they were given — empty when the
     /// stage is bare.
+    ///
+    /// An entry with no segments is a mark that had nothing to grow from: it
+    /// named a block whose silhouette it does not touch. Reported rather than
+    /// dropped, so a host can tell a mark that grew nothing from one it never
+    /// asked about, and so the answer stays index-for-index with the request.
     pub anchors: Vec<AnchorGrowth>,
     /// Which stage the depth count fell in.
     pub stage: usize,
@@ -221,12 +235,18 @@ impl Scriptorium {
         // Each block's silhouette, drawn clear of the halo its own text
         // carries so that a vine riding one is not blocked by the very
         // paragraph it is wrapping.
+        //
+        // Kept in both forms: the bare hull is the writing's own shape, and is
+        // what settles WHICH marks are on the silhouette at all; the grown one
+        // is the ring they ride. Growing is a Minkowski sum over a handful of
+        // vertices, so the second costs almost nothing once the first is had.
         let hull_pad = pad + params.hull_margin * geometry_scale;
-        let hulls: Vec<Vec<Point>> = req
+        let bare: Vec<Vec<Point>> = req
             .blocks
             .iter()
-            .map(|glyphs| block_hull(glyphs, &mut self.outlines, hull_pad))
+            .map(|glyphs| block_hull(glyphs, &mut self.outlines, 0.0))
             .collect();
+        let hulls: Vec<Vec<Point>> = bare.iter().map(|h| hull::grown(h, hull_pad)).collect();
 
         if stage == 0 || req.seed.is_empty() || req.seeds.is_empty() {
             return GrowthResponse {
@@ -250,6 +270,33 @@ impl Scriptorium {
             .iter()
             .zip(req.seeds.iter())
             .map(|(a, seed)| {
+                // A mark that names a block grows only if it is ON that
+                // block's silhouette. One buried in the middle of a line
+                // shapes nothing: the ring nearest it belongs to whichever
+                // letters do reach the edge, and a vine springing from there
+                // would be decorating its neighbours' outline while claiming
+                // to grow from this mark. Nothing to run means nothing grows.
+                let exposed = match seed.block.and_then(|i| bare.get(i)) {
+                    None => true, // no block named: a flourish off the letter, as ever
+                    Some(ring) => {
+                        let sigla = Glyph {
+                            ch: seed.ch.clone(),
+                            box_rect: seed.ink_box.unwrap_or(seed.mark_rect.unwrap_or(seed.box_rect)),
+                        };
+                        hull::on_hull(ring, &sigla, &mut self.outlines, ON_SILHOUETTE * geometry_scale)
+                    }
+                };
+                if !exposed {
+                    return AnchorGrowth {
+                        x: a.x,
+                        y: a.y,
+                        angle: a.angle,
+                        size: a.size,
+                        boost: 0,
+                        segments: Vec::new(),
+                    };
+                }
+
                 // Each anchor's own size earns it extra generations on top of
                 // the depth-driven stage — the SAME continuous derivation,
                 // just carried further for a large mark than for an ordinary
@@ -557,6 +604,24 @@ mod tests {
             .fold(0.0_f64, f64::max);
         assert!(reached > 50.0, "the border is run, not cut off at the mark's own leash");
         assert!(reached <= far + 1.0, "and not one step further than the block it decorates");
+    }
+
+    #[test]
+    fn a_mark_the_silhouette_does_not_touch_grows_nothing_at_all() {
+        let mut e = Scriptorium::new();
+        let mut req = one_listing_page();
+        // The same mark, moved from the head of its line into the middle of
+        // it: it shapes nothing, so there is no border of its own to run.
+        req.seeds[0].box_rect = Rect::new(220.0, 120.0, 10.0, 14.0);
+        req.seeds[0].mark_rect = Some(Rect::new(220.0, 120.0, 10.0, 14.0));
+        let out = e.illuminate(&req);
+        assert_eq!(out.anchors.len(), 1, "the mark is still reported, in the order it was given");
+        assert!(out.anchors[0].segments.is_empty(), "but nothing grew from it");
+
+        // …and it is the SILHOUETTE that decides, not the position: the same
+        // buried mark naming no block grows off its own letterform as ever.
+        req.seeds[0].block = None;
+        assert!(!e.illuminate(&req).anchors[0].segments.is_empty());
     }
 
     #[test]

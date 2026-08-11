@@ -480,6 +480,7 @@ function report(out, request, details, ms) {
     for (const s of a.segments) leaves += s.leaves.length;
   }
   const bordered = request.seeds.filter((s) => s.block !== null && s.block !== undefined).length;
+  const grew = out.anchors.filter((a) => a.segments.length).length;
   const glyphs = request.blocks.reduce((n, b) => n + b.length, 0);
 
   const rows = [
@@ -495,7 +496,10 @@ function report(out, request, details, ms) {
     // symbol has F outside any bracket. Raising `follow steps` does nothing
     // until this outgrows it.
     ['trunk', `${trunkOf(symbol)} F outside a branch = rail steps`],
-    ['marks', `${out.anchors.length}, ${bordered} riding a border`],
+    // A mark comes back with no segments when it is not on its block's own
+    // silhouette: nothing shapes the ring there, so there is no border of its
+    // own for it to run.
+    ['marks', `${out.anchors.length}, ${grew} grew, ${bordered} riding a border`],
     ['blocks', `${out.hulls.length}, ${glyphs} glyphs, ${out.hulls.map((h) => h.length).join('/') || '—'} corners`],
     // Measured, not asked for: on a narrow screen the page is capped by the
     // viewport whatever the column knob says, and the engine only ever sees

@@ -42,7 +42,10 @@ In the order it binds:
   the mark's own clockwise-most extent so that the first thing it does is wrap
   the stretch of ring that mark is exposed along. Start anywhere else and the
   ride sets off from part-way across the letter it grew from, leaving the rest
-  of that letter behind it for good. This is the border a scribe rules around a
+  of that letter behind it for good. A mark the silhouette does not touch —
+  one buried in the middle of a line, shaping nothing — grows nothing at all,
+  because the ring nearest it is not its own: it belongs to whichever letters
+  do reach the edge. This is the border a scribe rules around a
   paragraph rather than the flourish that leaves an initial. The ragged end of
   a short last line is inside that silhouette, not traced by it, and the ring
   is ruled clear of the writing so that a vine riding it is not blocked by the

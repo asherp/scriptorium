@@ -78,10 +78,15 @@ pub struct Seed {
     ///
     /// Given one, growth rides that block's own silhouette rather than the
     /// letterform's — the border a scribe rules around a paragraph rather than
-    /// the flourish that leaves a single initial — starting where the hull
-    /// comes nearest the mark and travelling counter-clockwise. A mark with no
+    /// the flourish that leaves a single initial — beginning at the mark's own
+    /// clockwise-most extent and travelling counter-clockwise. A mark with no
     /// block, or one naming a block the host did not send, falls back to its
     /// glyph's contour exactly as before.
+    ///
+    /// Naming a block is asking to be part of its border, and a mark that
+    /// contributes nothing to the block's shape grows NOTHING: it comes back
+    /// with an empty [`crate::AnchorGrowth`] rather than with a vine along
+    /// some neighbouring letter's stretch of the ring.
     pub block: Option<usize>,
 }
 
