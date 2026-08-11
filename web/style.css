@@ -313,6 +313,9 @@ main {
   flex: 1;
   min-width: 0;
   overflow: auto;
+  /* One finger still scrolls; two are ours, and drive the body size rather
+     than the browser's own magnifier. */
+  touch-action: pan-x pan-y;
   display: flex;
   justify-content: center;
   align-items: flex-start;

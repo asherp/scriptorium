@@ -174,6 +174,7 @@ function wire() {
     regrow();
   });
 
+  wirePinch();
   applyPageStyle();
 }
 
@@ -205,12 +206,25 @@ function regrow() {
   schedule();
 }
 
+/** Programmatic writers for the paired sliders, by state key. */
+const setKnob = {};
+
 function pairSlider(id, key, after) {
   const range = $(id);
   const num = $(`${id}-num`);
+  const step = Number(range.step) || 1;
+  const lo = Number(range.min);
+  const hi = Number(range.max);
+  const decimals = (String(step).split('.')[1] || '').length;
   const write = (v) => {
-    const n = Number(v);
+    let n = Number(v);
     if (!Number.isFinite(n)) return;
+    // Clamped and quantized to the control's own step, so a gesture that
+    // drives a knob leaves it reading exactly what it is set to — and rounded
+    // to the step's own precision, or a 0.1 step would leave 3.4000000000004
+    // in the box.
+    n = Math.min(hi, Math.max(lo, Number((Math.round(n / step) * step).toFixed(decimals))));
+    if (n === state[key]) return;
     state[key] = n;
     range.value = String(n);
     num.value = String(n);
@@ -221,6 +235,78 @@ function pairSlider(id, key, after) {
   num.value = String(state[key]);
   range.addEventListener('input', () => write(range.value));
   num.addEventListener('input', () => write(num.value));
+  setKnob[key] = write;
+}
+
+/**
+ * Pinch scales the TYPE, not the picture.
+ *
+ * A browser's own pinch magnifies what is already drawn: the same layout, the
+ * same growth, larger. That is the one thing this page has no use for. A
+ * reader who scales the type is the case the engine's `geometry_scale` exists
+ * for — the column reflows, the halo and the step scale with the letters, the
+ * derivation does not move — so the gesture drives the body size and the page
+ * answers as it would to any other reflow. Everything set in `em` (the drop
+ * cap, the sigla) follows from that, which is why they are set in `em`.
+ *
+ * `touch-action: pan-x pan-y` on the stage is what makes this possible: it
+ * leaves one-finger scrolling to the browser and hands us the pinch.
+ */
+function wirePinch() {
+  const stage = $('stage');
+  const touches = new Map();
+  let spread = 0;
+  let from = 0;
+
+  const gap = () => {
+    const [a, b] = [...touches.values()];
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  };
+
+  stage.addEventListener('pointerdown', (e) => {
+    if (e.pointerType !== 'touch') return;
+    touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (touches.size === 2) {
+      spread = gap();
+      from = state.fontSize;
+    }
+  });
+
+  stage.addEventListener(
+    'pointermove',
+    (e) => {
+      if (!touches.has(e.pointerId)) return;
+      touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (touches.size === 2 && spread > 0) {
+        e.preventDefault();
+        setKnob.fontSize(from * (gap() / spread));
+      }
+    },
+    { passive: false }
+  );
+
+  const lift = (e) => {
+    touches.delete(e.pointerId);
+    if (touches.size < 2) spread = 0;
+  };
+  stage.addEventListener('pointerup', lift);
+  stage.addEventListener('pointercancel', lift);
+
+  // A trackpad pinch reaches the page as a wheel event with ctrl held, which
+  // is also how a desktop browser's own zoom is asked for — so it has to be
+  // taken over rather than merely listened to.
+  stage.addEventListener(
+    'wheel',
+    (e) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      // Gentle: a trackpad pinch arrives as a stream of small deltas, a mouse
+      // wheel as one notch of a hundred or so, and this has to be usable with
+      // either without running to the end of the slider in three flicks.
+      setKnob.fontSize(state.fontSize * Math.exp(-e.deltaY / 300));
+    },
+    { passive: false }
+  );
 }
 
 function bindCheck(id, set, after) {

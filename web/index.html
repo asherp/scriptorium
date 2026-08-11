@@ -37,9 +37,9 @@
         measured here, then handed over as plain rectangles.
       </p>
       <div class="knob">
-        <label><span>body size (px)</span></label>
-        <input id="font-size" type="range" min="10" max="40" step="1">
-        <input id="font-size-num" type="number" min="10" max="40" step="1" class="num">
+        <label title="Pinch the page, or hold ctrl and scroll over it, to drive this. Everything set in em — the drop cap, the sigla — follows from it, and the column reflows."><span>body size (px)</span></label>
+        <input id="font-size" type="range" min="10" max="40" step="0.5">
+        <input id="font-size-num" type="number" min="10" max="40" step="0.5" class="num">
       </div>
       <div class="knob">
         <label title="An upper bound. The page never exceeds the viewport, so a narrow screen caps it — the readout shows what was actually measured."><span>column width</span></label>
@@ -127,7 +127,7 @@
     </details>
   </aside>
 
-  <section class="stage-wrap">
+  <section class="stage-wrap" id="stage">
     <div class="page" id="page">
       <div class="column" id="column"></div>
       <svg class="growth" id="growth" aria-hidden="true"></svg>
