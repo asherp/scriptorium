@@ -346,7 +346,14 @@ main {
 
 .term { cursor: pointer; border-radius: 2px; }
 .term:hover { background: var(--debug-obstacle); }
-.term.marked { color: var(--accent); }
+
+/* A mark is set at its own scale. The drop cap overrides this with an inline
+   size of its own, which is why it is an inline style and not another rule. */
+.term.marked {
+  color: var(--accent);
+  font-size: calc(1em * var(--sigla, 1));
+  line-height: 1;
+}
 
 .term.is-dropcap {
   float: left;
